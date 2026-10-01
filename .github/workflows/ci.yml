@@ -1,0 +1,94 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  calidad:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Sin rutas locales ni correos personales
+        run: |
+          if git grep -nIiE '([a-z]:[\/]+users[\/]|/home/[a-z0-9_-]+/|@(gmail|hotmail|outlook|yahoo)\.)'; then
+            echo "Hay datos personales en el repositorio" && exit 1
+          fi
+      - name: Restaurar
+        run: dotnet restore MurciaDatos.slnx
+      - name: Formato
+        run: dotnet format MurciaDatos.slnx --verify-no-changes --no-restore
+      - name: Compilar (avisos como errores)
+        run: dotnet build MurciaDatos.slnx --no-restore -c Release
+      # Cada proyecto de tests se ejecuta por separado: así falla en el proyecto concreto y el resultado no depende de
+      # cómo el SDK enlace con el ejecutor de pruebas. Ninguno necesita red ni Docker: los datos son ficticios y se
+      # generan en el propio test.
+      - name: Tests
+        run: |
+          for proyecto in tests/*.Tests/; do
+            echo "::group::${proyecto}"
+            dotnet run --project "${proyecto}" --no-build -c Release || exit 1
+            echo "::endgroup::"
+          done
+
+  dependencias:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Paquetes con vulnerabilidades conocidas (incluidos los transitivos)
+        run: |
+          dotnet restore MurciaDatos.slnx
+          dotnet list MurciaDatos.slnx package --vulnerable --include-transitive 2>&1 | tee vulnerabilidades.txt
+          if grep -qE '^\s+>' vulnerabilidades.txt; then
+            echo "Hay paquetes vulnerables" && exit 1
+          fi
+      - name: Paquetes en desuso
+        run: dotnet list MurciaDatos.slnx package --deprecated
+
+  imagen:
+    # Construye la imagen de verdad y comprueba lo que los tests no ven: que el explorador sale procesado de la
+    # publicación (nombres con huella, importmap), que la API arranca como usuario normal y que la política de
+    # contenido coincide con el importmap que sirve.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Construir
+        run: docker build -t murcia-datos-api:ci .
+      - name: "Arrancar sin datos (el origen no existe: debe arrancar igualmente, aunque no esté lista)"
+        run: |
+          docker run -d --name api -p 8080:8080 -e Datos__Origen=Directorio -e Datos__Ruta=/no-existe murcia-datos-api:ci
+          for i in $(seq 1 30); do curl -sf http://localhost:8080/health/live && break; sleep 1; done
+          curl -sf http://localhost:8080/health/live
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/health/ready)" = "503"
+          test "$(docker exec api id -u)" != "0"
+      - name: El explorador sale procesado
+        run: |
+          curl -sf http://localhost:8080/ -o indice.html
+          if grep -q 'fingerprint' indice.html; then echo "index.html sin procesar" && exit 1; fi
+          grep -q 'type="importmap"' indice.html
+          # El importmap no puede estar vacío y su hash tiene que estar en la política de contenido.
+          python3 - <<'PY'
+          import base64, hashlib, re, subprocess
+          pagina = open("indice.html", encoding="utf-8").read()
+          contenido = re.search(r'<script type="importmap">(.*?)</script>', pagina, re.S).group(1).replace("\r\n", "\n")
+          assert contenido.strip(), "importmap vacío"
+          hash_ = base64.b64encode(hashlib.sha256(contenido.encode()).digest()).decode()
+          cabeceras = subprocess.run(["curl", "-sI", "http://localhost:8080/"], capture_output=True, text=True).stdout
+          assert f"'sha256-{hash_}'" in cabeceras, "la política de contenido no incluye el hash del importmap"
+          PY
+          # Y los ficheros que nombra existen.
+          marco=$(grep -o '_framework/blazor.webassembly\.[a-z0-9]*\.js' indice.html | head -1)
+          curl -sf "http://localhost:8080/${marco}" -o /dev/null
+      - name: Registro del contenedor (si algo falló)
+        if: failure()
+        run: docker logs api

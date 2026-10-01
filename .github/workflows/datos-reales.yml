@@ -1,0 +1,49 @@
+name: datos-reales
+
+# La prueba que los tests no pueden hacer: arrancar la imagen contra la ÚLTIMA release de datos que haya publicado el
+# proyecto murcia-open-data (por red, con sus sumas y su contrato reales). Si el proyecto de datos cambia algo que esta
+# API no espera, falla aquí y no en producción.
+#
+# Se ejecuta cada mes, unos días después de la publicación de datos (día 3), y a mano.
+on:
+  schedule:
+    - cron: "30 8 5 * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  comprobar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Construir la imagen
+        run: docker build -t murcia-datos-api:ci .
+      - name: Arrancar contra la release real
+        run: docker run -d --name api -p 8080:8080 murcia-datos-api:ci
+      - name: Esperar a que cargue los datos (y comprobar la versión)
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8080/health/ready -o /dev/null; then break; fi
+            sleep 2
+          done
+          curl -sf http://localhost:8080/health/ready
+          curl -sf http://localhost:8080/v1/metadatos | tee metadatos.json
+          python3 - <<'PY'
+          import json
+          m = json.load(open("metadatos.json", encoding="utf-8"))
+          assert m["version_datos"].startswith("datos-"), m["version_datos"]
+          assert all(c["correcto"] for c in m["calidad"]), "algún control de calidad ha fallado"
+          assert m["problema_actualizacion"] is None, m["problema_actualizacion"]
+          print("OK:", m["version_datos"], m["periodo"])
+          PY
+      - name: Una consulta de cada recurso
+        run: |
+          curl -sf "http://localhost:8080/v1/demanda?territorio=region-murcia&tipo=hotel&residencia=total&agregacion=anio&medidas=pernoctaciones" | head -c 400
+          curl -sf "http://localhost:8080/v1/oferta?territorio=region-murcia&tipo=hotel&desde=2024-01&hasta=2024-03" | head -c 400
+          curl -sf "http://localhost:8080/v1/precios?territorio=region-murcia&desde=2024-01&hasta=2024-03" | head -c 400
+          curl -sf "http://localhost:8080/v1/indicadores/estacionalidad" | head -c 400
+      - name: Registro del contenedor (si algo falló)
+        if: failure()
+        run: docker logs api
