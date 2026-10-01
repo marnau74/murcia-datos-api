@@ -23,7 +23,9 @@ VPS normal, con la misma imagen.
     sistema de ficheros de solo lectura, sin capacidades de Linux, `no-new-privileges` y un volumen para
     los datos descargados.
 - **Salud**: `/health/live` (el proceso responde) y `/health/ready` (hay datos cargados; «degradada» si
-  la última actualización falló pero se sigue sirviendo la anterior: no se saca de rotación).
+  la última actualización falló, o si hace más de dos intervalos que no se comprueba el origen, pero se
+  sigue sirviendo la anterior: no se saca de rotación). Un error imprevisto en una vuelta del
+  actualizador se anota y se reintenta en la siguiente: nunca para las actualizaciones.
   Caddy las oculta hacia fuera.
 - **Observabilidad**: OpenTelemetry (trazas y métricas de ASP.NET Core, HTTP y runtime, más métricas
   propias: consultas por recurso y resultado, y duración en DuckDB), exportadas solo si hay colector

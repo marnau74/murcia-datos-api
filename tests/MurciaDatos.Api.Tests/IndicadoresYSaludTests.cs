@@ -1,7 +1,15 @@
 using System.Net;
 using System.Text.Json;
 
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
+
+using MurciaDatos.Api.Salud;
 using MurciaDatos.Datos.Actualizacion;
+using MurciaDatos.Datos.Consultas;
+using MurciaDatos.Datos.Origen;
 using MurciaDatos.Tests.Comunes;
 
 using Shouldly;
@@ -145,6 +153,35 @@ public class SaludYActualizacionTests
         (await api.Actualizacion.ActualizarAsync(TestContext.Current.CancellationToken)).ShouldBe(ResultadoDeActualizacion.Actualizado);
 
         (await cliente.GetAsync("/v1/territorios", TestContext.Current.CancellationToken)).StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Si_hace_dos_intervalos_que_no_se_comprueba_el_origen_la_salud_sale_degradada()
+    {
+        // El actualizador se ha parado o no termina nunca, pero sin dejar ningún error: sin esta comprobación la sonda
+        // seguiría diciendo «lista» mientras los datos envejecen.
+        using var directorio = new DirectorioTemporal();
+        var opciones = Options.Create(new OpcionesDeDatos
+        {
+            Origen = TipoDeOrigen.Directorio,
+            Ruta = directorio.Subcarpeta("release"),
+            Directorio = directorio.Subcarpeta("datos"),
+            IntervaloHoras = 6,
+        });
+        ReleaseDePrueba.Crear(opciones.Value.Ruta!);
+        var reloj = new FakeTimeProvider(new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero));
+        using var almacen = new AlmacenDeInstantaneas();
+        using var servicio = new ServicioDeActualizacion(new OrigenDirectorio(opciones), almacen, [], opciones, reloj, NullLogger<ServicioDeActualizacion>.Instance);
+        var salud = new SaludDeLosDatos(almacen, servicio, opciones, reloj);
+        await servicio.ActualizarAsync(TestContext.Current.CancellationToken);
+
+        reloj.Advance(TimeSpan.FromHours(12));
+        (await salud.CheckHealthAsync(new HealthCheckContext(), TestContext.Current.CancellationToken)).Status.ShouldBe(HealthStatus.Healthy);
+
+        reloj.Advance(TimeSpan.FromMinutes(1));
+        var pasada = await salud.CheckHealthAsync(new HealthCheckContext(), TestContext.Current.CancellationToken);
+        pasada.Status.ShouldBe(HealthStatus.Degraded);
+        pasada.Description!.ShouldContain("no se comprueba");
     }
 
     [Fact]

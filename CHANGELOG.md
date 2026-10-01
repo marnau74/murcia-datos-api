@@ -2,6 +2,17 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y versionado semántico.
 
+## [Sin publicar]
+
+### Corregido
+- Un error imprevisto al actualizar (una respuesta de GitHub con otra forma, un fichero de DuckDB que no
+  abre) paraba las actualizaciones para siempre, y la sonda de salud seguía diciendo «lista». Ahora cuenta
+  como una vuelta fallida: se anota, se sigue sirviendo la versión actual y se reintenta en la siguiente.
+- La sonda de salud sale «degradada» si hace más de dos intervalos que no se comprueba el origen.
+
+### Cambiado
+- `publicar` pasa la CI completa antes de construir y publicar la imagen.
+
 ## [1.0.0] — 2026-10-01
 
 Primera versión completa.

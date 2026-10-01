@@ -83,8 +83,9 @@ public sealed partial class ServicioDeActualizacion(
                 Cargada(registro, instantanea.Etiqueta, instantanea.Huella);
                 return;
             }
-            catch (Exception ex) when (ex is ContratoInvalidoException or IOException or UnauthorizedAccessException)
+            catch (Exception ex) when (!cancelacion.IsCancellationRequested)
             {
+                // Una carpeta que no vale (sumas, contrato, un fichero que DuckDB no abre…) se descarta y se prueba la anterior.
                 DescartadaDeDisco(registro, carpeta, ex.Message);
             }
         }
@@ -193,6 +194,15 @@ public sealed partial class ServicioDeActualizacion(
         {
             UltimoProblema = ex.Message;
             Fallida(registro, ex);
+            return ResultadoDeActualizacion.Fallido;
+        }
+        catch (Exception ex) when (!cancelacion.IsCancellationRequested)
+        {
+            // Cualquier otra cosa (una respuesta de GitHub con otra forma, un fichero de DuckDB que no abre…) también es un
+            // fallo de esta comprobación y no del servicio: se sigue sirviendo la versión actual y se reintenta en el próximo
+            // ciclo. Si se dejara escapar, pararía las actualizaciones para siempre.
+            UltimoProblema = $"Error inesperado: {ex.Message}";
+            Inesperada(registro, ex);
             return ResultadoDeActualizacion.Fallido;
         }
         finally
@@ -317,6 +327,9 @@ public sealed partial class ServicioDeActualizacion(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "No se ha podido actualizar los datos; se reintentará en el próximo ciclo.")]
     private static partial void Fallida(ILogger logger, Exception excepcion);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Error inesperado al actualizar los datos; se sigue con la versión actual y se reintentará en el próximo ciclo.")]
+    private static partial void Inesperada(ILogger logger, Exception excepcion);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Se descarta la versión guardada en {Carpeta}: {Motivo}")]
     private static partial void DescartadaDeDisco(ILogger logger, string carpeta, string motivo);

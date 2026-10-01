@@ -11,7 +11,7 @@ namespace MurciaDatos.Api;
 /// <summary>
 /// Tarea en segundo plano: al arrancar carga lo que haya en disco (para servir enseguida) y luego comprueba el
 /// origen cada <see cref="OpcionesDeDatos.IntervaloHoras"/> horas. Mientras no haya ninguna versión cargada
-/// reintenta cada minuto.
+/// reintenta cada minuto. Un fallo, del tipo que sea, solo cuenta para esa vuelta: nunca para el bucle.
 /// </summary>
 public sealed partial class ActualizadorDeDatos(
     ServicioDeActualizacion servicio,
@@ -26,11 +26,11 @@ public sealed partial class ActualizadorDeDatos(
     {
         try
         {
-            await servicio.CargarDeDiscoAsync(stoppingToken);
+            await VueltaAsync(() => servicio.CargarDeDiscoAsync(stoppingToken), stoppingToken);
 
             while (!stoppingToken.IsCancellationRequested)
             {
-                await servicio.ActualizarAsync(stoppingToken);
+                await VueltaAsync(() => servicio.ActualizarAsync(stoppingToken), stoppingToken);
 
                 var espera = almacen.Actual is null ? EsperaSinDatos : TimeSpan.FromHours(opciones.Value.IntervaloHoras);
                 using var temporizador = new PeriodicTimer(espera, reloj);
@@ -41,15 +41,23 @@ public sealed partial class ActualizadorDeDatos(
         {
             // Parada normal del servicio.
         }
-        catch (Exception ex)
+    }
+
+    private async Task VueltaAsync(Func<Task> accion, CancellationToken stoppingToken)
+    {
+        try
         {
-            // Un fallo inesperado no debe tumbar la API: se anota y se deja de actualizar.
-            Detenido(registro, ex);
+            await accion();
+        }
+        catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+        {
+            // Cualquier fallo de una vuelta se anota y se reintenta en la siguiente: el bucle no se para nunca.
+            VueltaFallida(registro, ex);
         }
     }
 
-    [LoggerMessage(Level = LogLevel.Critical, Message = "El actualizador de datos se ha detenido por un error inesperado.")]
-    private static partial void Detenido(ILogger logger, Exception excepcion);
+    [LoggerMessage(Level = LogLevel.Error, Message = "Una vuelta del actualizador de datos ha fallado; se reintentará en la siguiente.")]
+    private static partial void VueltaFallida(ILogger logger, Exception excepcion);
 }
 
 /// <summary>Cuando cambian los datos, vacía la caché de salida.</summary>

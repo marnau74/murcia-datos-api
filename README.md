@@ -14,7 +14,7 @@ y este proyecto, en .NET, los sirve.
 - **Datos que no mienten:** un mes sin dato es `null` y nunca 0; los totales no suman partes; cada periodo
   agregado dice cuántos meses lleva; lo provisional va marcado ([ADR 0004](docs/adr/0004-semantica-de-los-datos.md)).
 - **Se actualiza sola, sin cortes:** descarga la release mensual, verifica sumas y contrato y cambia de versión
-  de forma atómica; si algo falla, sigue sirviendo la anterior.
+  de forma atómica; si algo falla, sigue sirviendo la anterior, lo dice en la sonda de salud y lo reintenta.
 - **Rápida y medida:** p95 de 9 ms con la caché caliente y de 16 ms sin ella ([cómo se midió](docs/adr/0007-rendimiento-y-medidas.md)).
 - **Explorador incluido:** filtros, gráfica, tabla, URL compartible y la llamada equivalente lista para copiar.
 
@@ -79,7 +79,7 @@ Las decisiones importantes están en [`docs/adr`](docs/adr/README.md). Las que m
 
 ## Calidad
 
-252 tests (`dotnet run --project tests/<proyecto>` por cada uno): datos con servidores y ficheros reales,
+254 tests (`dotnet run --project tests/<proyecto>` por cada uno): datos con servidores y ficheros reales,
 la API entera en memoria (caché, 304, límites con reloj falso, CORS, CSV, contrato OpenAPI guardado en el
 repositorio y comparado) y el explorador con `bUnit`. Los datos de los tests son **ficticios y deterministas**,
 con una fórmula que los propios tests conocen, para poder comprobar cada cifra.

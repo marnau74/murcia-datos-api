@@ -215,6 +215,26 @@ public sealed class ActualizacionTests : IDisposable
     }
 
     [Fact]
+    public async Task Un_error_inesperado_tampoco_se_escapa_se_anota_y_se_sigue_sirviendo()
+    {
+        // Por ejemplo, GitHub responde con un JSON de otra forma: antes la excepción salía del servicio y paraba las
+        // actualizaciones para siempre.
+        NuevaRelease();
+        await _servicio.ActualizarAsync(TestContext.Current.CancellationToken);
+
+        _origen.Fallo = new InvalidOperationException("la respuesta no es una lista");
+        var resultado = await _servicio.ActualizarAsync(TestContext.Current.CancellationToken);
+
+        resultado.ShouldBe(ResultadoDeActualizacion.Fallido);
+        _servicio.UltimoProblema!.ShouldContain("la respuesta no es una lista");
+        ViajerosServidos().ShouldBe(Base);
+
+        _origen.Fallo = null;
+        (await _servicio.ActualizarAsync(TestContext.Current.CancellationToken)).ShouldBe(ResultadoDeActualizacion.SinNovedades, "la siguiente vuelta funciona");
+        _servicio.UltimoProblema.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task Al_arrancar_carga_lo_guardado_en_disco_aunque_el_origen_no_responda()
     {
         NuevaRelease();
