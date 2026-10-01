@@ -1,6 +1,8 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/MurciaDatos.Api/MurciaDatos.Api.csproj" />
     <Project Path="src/MurciaDatos.Datos/MurciaDatos.Datos.csproj" />
+    <Project Path="src/MurciaDatos.Explorador/MurciaDatos.Explorador.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/MurciaDatos.Datos.Tests/MurciaDatos.Datos.Tests.csproj" />
