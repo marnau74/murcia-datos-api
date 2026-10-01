@@ -51,14 +51,23 @@ public sealed class LimitadorPorIp(RequestDelegate siguiente, IOptions<OpcionesD
         Purgar(ahora, duracion);
 
         var segundos = Math.Max(1, (int)Math.Ceiling((reinicio - ahora).TotalSeconds));
-        var cabeceras = contexto.Response.Headers;
-        cabeceras["RateLimit-Limit"] = limite.ToString(CultureInfo.InvariantCulture);
-        cabeceras["RateLimit-Remaining"] = restantes.ToString(CultureInfo.InvariantCulture);
-        cabeceras["RateLimit-Reset"] = segundos.ToString(CultureInfo.InvariantCulture);
-        cabeceras["RateLimit-Policy"] = $"{limite};w={opciones.Value.VentanaSegundos}";
+        var politica = $"{limite};w={opciones.Value.VentanaSegundos}";
+
+        // Las cabeceras se ponen al empezar a responder, ya con la caché de salida (que va después en la tubería) resuelta:
+        // así una respuesta servida desde la caché lleva el contador de ESTA petición y no el de la que la generó.
+        contexto.Response.OnStarting(() =>
+        {
+            var cabeceras = contexto.Response.Headers;
+            cabeceras["RateLimit-Limit"] = limite.ToString(CultureInfo.InvariantCulture);
+            cabeceras["RateLimit-Remaining"] = restantes.ToString(CultureInfo.InvariantCulture);
+            cabeceras["RateLimit-Reset"] = segundos.ToString(CultureInfo.InvariantCulture);
+            cabeceras["RateLimit-Policy"] = politica;
+            return Task.CompletedTask;
+        });
 
         if (!permitida)
         {
+            var cabeceras = contexto.Response.Headers;
             cabeceras.RetryAfter = segundos.ToString(CultureInfo.InvariantCulture);
             contexto.Response.StatusCode = StatusCodes.Status429TooManyRequests;
             await contexto.Response.WriteAsJsonAsync(

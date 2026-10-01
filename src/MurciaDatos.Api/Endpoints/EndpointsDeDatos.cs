@@ -53,22 +53,19 @@ public static class EndpointsDeDatos
             .WithName("ConsultarDemanda").WithTags("Series")
             .WithSummary("Viajeros y pernoctaciones")
             .WithDescription("Demanda de alojamiento turístico por mes, trimestre o año. Los flujos se **suman** al agregar. Un mes sin dato es `null`, nunca 0; con `agregacion` distinta de `mes`, `meses` dice cuántos meses con dato entran en cada periodo (un año en curso tiene menos de 12).")
-            .Produces<RespuestaDeSerie>().Produces(StatusCodes.Status304NotModified).ProducesProblem(StatusCodes.Status400BadRequest).ProducesProblem(StatusCodes.Status429TooManyRequests).ProducesProblem(StatusCodes.Status503ServiceUnavailable)
-            .Produces<string>(StatusCodes.Status200OK, "text/csv");
+            .Produces<RespuestaDeSerie>().Produces(StatusCodes.Status304NotModified).ProducesProblem(StatusCodes.Status400BadRequest).ProducesProblem(StatusCodes.Status429TooManyRequests).ProducesProblem(StatusCodes.Status503ServiceUnavailable);
 
         v1.MapGet("/oferta", (HttpContext http, [AsParameters] ParametrosDeSerie p, AlmacenDeInstantaneas almacen, IOptions<OpcionesDeDatos> o, MetricasDeApi m) => Serie(Hecho.Oferta, "oferta", http, p, almacen, o.Value, m))
             .WithName("ConsultarOferta").WithTags("Series")
             .WithSummary("Establecimientos, plazas, ocupación y empleo")
             .WithDescription("Oferta de alojamiento y su ocupación. Son **existencias y tasas**: al agregar por trimestre o año se hace la **media** de los meses. Las medidas que no aplican a un tipo (las parcelas en un hotel) son `null`.")
-            .Produces<RespuestaDeSerie>().Produces(StatusCodes.Status304NotModified).ProducesProblem(StatusCodes.Status400BadRequest).ProducesProblem(StatusCodes.Status429TooManyRequests).ProducesProblem(StatusCodes.Status503ServiceUnavailable)
-            .Produces<string>(StatusCodes.Status200OK, "text/csv");
+            .Produces<RespuestaDeSerie>().Produces(StatusCodes.Status304NotModified).ProducesProblem(StatusCodes.Status400BadRequest).ProducesProblem(StatusCodes.Status429TooManyRequests).ProducesProblem(StatusCodes.Status503ServiceUnavailable);
 
         v1.MapGet("/precios", (HttpContext http, [AsParameters] ParametrosDeSerie p, AlmacenDeInstantaneas almacen, IOptions<OpcionesDeDatos> o, MetricasDeApi m) => Serie(Hecho.Precios, "precios", http, p, almacen, o.Value, m))
             .WithName("ConsultarPrecios").WithTags("Series")
             .WithSummary("Índice de precios hoteleros")
             .WithDescription("Índice de precios hoteleros (INE). Al agregar se hace la media del índice; la variación interanual solo existe con `agregacion=mes`.")
-            .Produces<RespuestaDeSerie>().Produces(StatusCodes.Status304NotModified).ProducesProblem(StatusCodes.Status400BadRequest).ProducesProblem(StatusCodes.Status429TooManyRequests).ProducesProblem(StatusCodes.Status503ServiceUnavailable)
-            .Produces<string>(StatusCodes.Status200OK, "text/csv");
+            .Produces<RespuestaDeSerie>().Produces(StatusCodes.Status304NotModified).ProducesProblem(StatusCodes.Status400BadRequest).ProducesProblem(StatusCodes.Status429TooManyRequests).ProducesProblem(StatusCodes.Status503ServiceUnavailable);
 
         v1.MapGet("/indicadores/estacionalidad", (HttpContext http, [AsParameters] ParametrosDeIndicador p, AlmacenDeInstantaneas almacen, IOptions<OpcionesDeDatos> o, MetricasDeApi m) => Estacionalidad(http, p, almacen, o.Value, m))
             .WithName("ConsultarEstacionalidad").WithTags("Indicadores")

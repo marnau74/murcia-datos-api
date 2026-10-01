@@ -1,0 +1,1317 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "API de datos de turismo de Murcia",
+    "description": "Demanda, oferta y precios del alojamiento turístico en la Región de Murcia (INE y murciaturistica.es), servidos desde la\r\nrelease mensual del proyecto murcia-open-data.\r\n\r\n**Convenciones**\r\n- Solo lectura (`GET`). Prefijo `/v1`. Identificadores en `kebab-case`; fechas como `AAAA-MM`.\r\n- Un dato que no existe (un mes sin publicar, una medida que no aplica) es `null`, **nunca 0**.\r\n- Los valores provisionales se marcan con `provisional`; `meta.provisional_desde` dice desde qué mes lo son.\r\n- Los errores son `application/problem+json` (RFC 9457) y enumeran los valores permitidos.\r\n- JSON o CSV (`formato=csv` o `Accept: text/csv`; `excel=true` para abrirlo directamente en Excel en español).\r\n- Caché: `ETag` y `If-None-Match` (304). Límite de peticiones por IP: cabeceras `RateLimit-*`; al pasarse, 429 con `Retry-After`.",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/v1/metadatos": {
+      "get": {
+        "tags": [
+          "Catálogos"
+        ],
+        "summary": "Versión de los datos, periodo, fuentes, licencia y controles de calidad",
+        "description": "Qué datos se están sirviendo ahora: la release de la que salen, el periodo que cubren, desde cuándo son provisionales y el resultado de los controles que esta API ejecuta al cargarlos (suma SHA-256, contrato, esquema, filas, claves e integridad).",
+        "operationId": "ObtenerMetadatos",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Metadatos"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/territorios": {
+      "get": {
+        "tags": [
+          "Catálogos"
+        ],
+        "summary": "Territorios, con su jerarquía y los recursos para los que hay datos",
+        "description": "Los territorios del INE y de murciaturistica.es conviven en una jerarquía explícita (`padre`). No se suman territorios de niveles o fuentes distintos: un destino de murciaturistica y un municipio del INE no son comparables.",
+        "operationId": "ListarTerritorios",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListadoOfTerritorioPublico"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tipos-alojamiento": {
+      "get": {
+        "tags": [
+          "Catálogos"
+        ],
+        "summary": "Tipos de alojamiento",
+        "operationId": "ListarTiposDeAlojamiento",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListadoOfTipoPublico"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/residencias": {
+      "get": {
+        "tags": [
+          "Catálogos"
+        ],
+        "summary": "Residencias de los viajeros (España o extranjero)",
+        "description": "En la demanda se puede pedir también `residencia=total`, que suma ambas.",
+        "operationId": "ListarResidencias",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListadoOfTipoPublico"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/demanda": {
+      "get": {
+        "tags": [
+          "Series"
+        ],
+        "summary": "Viajeros y pernoctaciones",
+        "description": "Demanda de alojamiento turístico por mes, trimestre o año. Los flujos se **suman** al agregar. Un mes sin dato es `null`, nunca 0; con `agregacion` distinta de `mes`, `meses` dice cuántos meses con dato entran en cada periodo (un año en curso tiene menos de 12).",
+        "operationId": "ConsultarDemanda",
+        "parameters": [
+          {
+            "name": "territorio",
+            "in": "query",
+            "description": "Identificadores de territorio separados por comas (consulta /v1/territorios). Sin indicar: todos.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "description": "Tipos de alojamiento separados por comas: hotel, apartamento, camping, rural. Sin indicar: todos los que haya.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "residencia",
+            "in": "query",
+            "description": "Solo demanda. «espana», «extranjero», ambos separados por coma, o «total» para sumarlos. Sin indicar: una fila por residencia.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "description": "Primer mes, como AAAA-MM.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "description": "Último mes, como AAAA-MM.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agregacion",
+            "in": "query",
+            "description": "mes (por defecto), trimestre o anio. Los flujos se suman; las existencias, tasas e índices se promedian.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "medidas",
+            "in": "query",
+            "description": "Medidas separadas por comas. Sin indicar: todas las del recurso.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "formato",
+            "in": "query",
+            "description": "json (por defecto) o csv. También se puede pedir con la cabecera Accept: text/csv.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "excel",
+            "in": "query",
+            "description": "Con formato=csv: true para separar con punto y coma y decimales con coma, y añadir BOM UTF-8 (para abrirlo directamente en Excel en español).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaDeSerie"
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/oferta": {
+      "get": {
+        "tags": [
+          "Series"
+        ],
+        "summary": "Establecimientos, plazas, ocupación y empleo",
+        "description": "Oferta de alojamiento y su ocupación. Son **existencias y tasas**: al agregar por trimestre o año se hace la **media** de los meses. Las medidas que no aplican a un tipo (las parcelas en un hotel) son `null`.",
+        "operationId": "ConsultarOferta",
+        "parameters": [
+          {
+            "name": "territorio",
+            "in": "query",
+            "description": "Identificadores de territorio separados por comas (consulta /v1/territorios). Sin indicar: todos.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "description": "Tipos de alojamiento separados por comas: hotel, apartamento, camping, rural. Sin indicar: todos los que haya.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "residencia",
+            "in": "query",
+            "description": "Solo demanda. «espana», «extranjero», ambos separados por coma, o «total» para sumarlos. Sin indicar: una fila por residencia.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "description": "Primer mes, como AAAA-MM.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "description": "Último mes, como AAAA-MM.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agregacion",
+            "in": "query",
+            "description": "mes (por defecto), trimestre o anio. Los flujos se suman; las existencias, tasas e índices se promedian.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "medidas",
+            "in": "query",
+            "description": "Medidas separadas por comas. Sin indicar: todas las del recurso.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "formato",
+            "in": "query",
+            "description": "json (por defecto) o csv. También se puede pedir con la cabecera Accept: text/csv.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "excel",
+            "in": "query",
+            "description": "Con formato=csv: true para separar con punto y coma y decimales con coma, y añadir BOM UTF-8 (para abrirlo directamente en Excel en español).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaDeSerie"
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/precios": {
+      "get": {
+        "tags": [
+          "Series"
+        ],
+        "summary": "Índice de precios hoteleros",
+        "description": "Índice de precios hoteleros (INE). Al agregar se hace la media del índice; la variación interanual solo existe con `agregacion=mes`.",
+        "operationId": "ConsultarPrecios",
+        "parameters": [
+          {
+            "name": "territorio",
+            "in": "query",
+            "description": "Identificadores de territorio separados por comas (consulta /v1/territorios). Sin indicar: todos.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "description": "Tipos de alojamiento separados por comas: hotel, apartamento, camping, rural. Sin indicar: todos los que haya.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "residencia",
+            "in": "query",
+            "description": "Solo demanda. «espana», «extranjero», ambos separados por coma, o «total» para sumarlos. Sin indicar: una fila por residencia.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "description": "Primer mes, como AAAA-MM.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "description": "Último mes, como AAAA-MM.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agregacion",
+            "in": "query",
+            "description": "mes (por defecto), trimestre o anio. Los flujos se suman; las existencias, tasas e índices se promedian.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "medidas",
+            "in": "query",
+            "description": "Medidas separadas por comas. Sin indicar: todas las del recurso.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "formato",
+            "in": "query",
+            "description": "json (por defecto) o csv. También se puede pedir con la cabecera Accept: text/csv.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "excel",
+            "in": "query",
+            "description": "Con formato=csv: true para separar con punto y coma y decimales con coma, y añadir BOM UTF-8 (para abrirlo directamente en Excel en español).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaDeSerie"
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/indicadores/estacionalidad": {
+      "get": {
+        "tags": [
+          "Indicadores"
+        ],
+        "summary": "Perfil estacional y relación agosto/enero",
+        "description": "Cada año completo (con los doce meses) reparte su total entre los meses; el perfil es la media de esas cuotas. `indice` vale 100 para un mes «medio». Los años con meses provisionales no entran salvo `incluir_provisionales=true`.",
+        "operationId": "ConsultarEstacionalidad",
+        "parameters": [
+          {
+            "name": "territorio",
+            "in": "query",
+            "description": "Un territorio con demanda. Por defecto, region-murcia.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "description": "Un tipo de alojamiento. Por defecto, hotel.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "medida",
+            "in": "query",
+            "description": "viajeros o pernoctaciones (por defecto).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "residencia",
+            "in": "query",
+            "description": "espana, extranjero o total (por defecto).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "anio",
+            "in": "query",
+            "description": "Solo en la variación: año a analizar. Por defecto, el último con datos.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "incluir_provisionales",
+            "in": "query",
+            "description": "Solo en la estacionalidad: true para que entren también los años con meses provisionales.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaDeEstacionalidad"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/indicadores/variacion": {
+      "get": {
+        "tags": [
+          "Indicadores"
+        ],
+        "summary": "Variación frente al año anterior y frente a 2019",
+        "description": "Del último mes con dato (sin huecos desde enero) y del acumulado del año hasta ese mes, frente al mismo periodo del año anterior y de 2019. Si a la referencia le falta algún mes, la variación es `null`: no se compara contra un periodo incompleto.",
+        "operationId": "ConsultarVariacion",
+        "parameters": [
+          {
+            "name": "territorio",
+            "in": "query",
+            "description": "Un territorio con demanda. Por defecto, region-murcia.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "description": "Un tipo de alojamiento. Por defecto, hotel.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "medida",
+            "in": "query",
+            "description": "viajeros o pernoctaciones (por defecto).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "residencia",
+            "in": "query",
+            "description": "espana, extranjero o total (por defecto).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "anio",
+            "in": "query",
+            "description": "Solo en la variación: año a analizar. Por defecto, el último con datos.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "incluir_provisionales",
+            "in": "query",
+            "description": "Solo en la estacionalidad: true para que entren también los años con meses provisionales.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaDeVariacion"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ComparacionPublica": {
+        "required": [
+          "valor_referencia",
+          "variacion_pct"
+        ],
+        "type": "object",
+        "properties": {
+          "valor_referencia": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "variacion_pct": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          }
+        }
+      },
+      "ControlPublico": {
+        "required": [
+          "control",
+          "correcto",
+          "detalle"
+        ],
+        "type": "object",
+        "properties": {
+          "control": {
+            "type": "string"
+          },
+          "correcto": {
+            "type": "boolean"
+          },
+          "detalle": {
+            "type": "string"
+          }
+        }
+      },
+      "CuotaPublica": {
+        "required": [
+          "mes",
+          "nombre_mes",
+          "cuota_media",
+          "indice"
+        ],
+        "type": "object",
+        "properties": {
+          "mes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "nombre_mes": {
+            "type": "string"
+          },
+          "cuota_media": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "indice": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          }
+        }
+      },
+      "DatosDeEstacionalidad": {
+        "required": [
+          "territorio",
+          "tipo",
+          "residencia",
+          "medida",
+          "perfil",
+          "relacion_agosto_enero",
+          "anios_usados"
+        ],
+        "type": "object",
+        "properties": {
+          "territorio": {
+            "type": "string"
+          },
+          "tipo": {
+            "type": "string"
+          },
+          "residencia": {
+            "type": "string"
+          },
+          "medida": {
+            "type": "string"
+          },
+          "perfil": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CuotaPublica"
+            }
+          },
+          "relacion_agosto_enero": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "anios_usados": {
+            "type": "array",
+            "items": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        }
+      },
+      "DatosDeVariacion": {
+        "required": [
+          "territorio",
+          "tipo",
+          "residencia",
+          "medida",
+          "anio",
+          "ultimo_mes",
+          "provisional",
+          "mes",
+          "acumulado"
+        ],
+        "type": "object",
+        "properties": {
+          "territorio": {
+            "type": "string"
+          },
+          "tipo": {
+            "type": "string"
+          },
+          "residencia": {
+            "type": "string"
+          },
+          "medida": {
+            "type": "string"
+          },
+          "anio": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "ultimo_mes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "provisional": {
+            "type": "boolean"
+          },
+          "mes": {
+            "$ref": "#/components/schemas/PeriodoComparado"
+          },
+          "acumulado": {
+            "$ref": "#/components/schemas/PeriodoComparado"
+          }
+        }
+      },
+      "ListadoOfTerritorioPublico": {
+        "required": [
+          "datos",
+          "meta"
+        ],
+        "type": "object",
+        "properties": {
+          "datos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TerritorioPublico"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaDeListado"
+          }
+        }
+      },
+      "ListadoOfTipoPublico": {
+        "required": [
+          "datos",
+          "meta"
+        ],
+        "type": "object",
+        "properties": {
+          "datos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TipoPublico"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaDeListado"
+          }
+        }
+      },
+      "MedidaPublica": {
+        "required": [
+          "id",
+          "unidad",
+          "agregado",
+          "descripcion"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "unidad": {
+            "type": "string"
+          },
+          "agregado": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": "string"
+          }
+        },
+        "description": "Una medida disponible en un recurso, tal y como se describe en `meta.medidas`."
+      },
+      "Metadatos": {
+        "required": [
+          "version_datos",
+          "huella",
+          "publicado",
+          "cargada_en",
+          "version_contrato",
+          "periodo",
+          "fuentes",
+          "licencia",
+          "disponibilidad",
+          "calidad",
+          "ultima_comprobacion",
+          "problema_actualizacion"
+        ],
+        "type": "object",
+        "properties": {
+          "version_datos": {
+            "type": "string"
+          },
+          "huella": {
+            "type": "string"
+          },
+          "publicado": {
+            "type": "string"
+          },
+          "cargada_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version_contrato": {
+            "type": "string"
+          },
+          "periodo": {
+            "$ref": "#/components/schemas/RangoDeMeses"
+          },
+          "fuentes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "licencia": {
+            "type": "string"
+          },
+          "disponibilidad": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/RangoDeMeses"
+            }
+          },
+          "calidad": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ControlPublico"
+            }
+          },
+          "ultima_comprobacion": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "problema_actualizacion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "MetaDeIndicador": {
+        "required": [
+          "version_datos",
+          "fuentes",
+          "nota"
+        ],
+        "type": "object",
+        "properties": {
+          "version_datos": {
+            "type": "string"
+          },
+          "fuentes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "nota": {
+            "type": "string"
+          }
+        }
+      },
+      "MetaDeListado": {
+        "required": [
+          "version_datos"
+        ],
+        "type": "object",
+        "properties": {
+          "version_datos": {
+            "type": "string"
+          }
+        }
+      },
+      "MetaDeSerie": {
+        "required": [
+          "version_datos",
+          "fuentes",
+          "provisional_desde",
+          "agregacion",
+          "medidas",
+          "total_filas"
+        ],
+        "type": "object",
+        "properties": {
+          "version_datos": {
+            "type": "string"
+          },
+          "fuentes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "provisional_desde": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "agregacion": {
+            "type": "string"
+          },
+          "medidas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MedidaPublica"
+            }
+          },
+          "total_filas": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "PeriodoComparado": {
+        "required": [
+          "valor",
+          "frente_anio_anterior",
+          "frente_2019"
+        ],
+        "type": "object",
+        "properties": {
+          "valor": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "frente_anio_anterior": {
+            "$ref": "#/components/schemas/ComparacionPublica"
+          },
+          "frente_2019": {
+            "$ref": "#/components/schemas/ComparacionPublica"
+          }
+        }
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instance": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "RangoDeMeses": {
+        "required": [
+          "desde",
+          "hasta",
+          "provisional_desde"
+        ],
+        "type": "object",
+        "properties": {
+          "desde": {
+            "type": "string"
+          },
+          "hasta": {
+            "type": "string"
+          },
+          "provisional_desde": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "RespuestaDeEstacionalidad": {
+        "required": [
+          "datos",
+          "meta"
+        ],
+        "type": "object",
+        "properties": {
+          "datos": {
+            "$ref": "#/components/schemas/DatosDeEstacionalidad"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaDeIndicador"
+          }
+        }
+      },
+      "RespuestaDeSerie": {
+        "required": [
+          "datos",
+          "meta"
+        ],
+        "type": "object",
+        "properties": {
+          "datos": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaDeSerie"
+          }
+        },
+        "description": "Respuesta de las series. Cada fila de `datos` tiene las claves `periodo`, `territorio`, `tipo`,\r\n(`residencia` en la demanda), `fuente`, `meses` (si se agrega), `provisional` y una clave por medida pedida.\r\nUn dato que no existe es `null`, nunca 0."
+      },
+      "RespuestaDeVariacion": {
+        "required": [
+          "datos",
+          "meta"
+        ],
+        "type": "object",
+        "properties": {
+          "datos": {
+            "$ref": "#/components/schemas/DatosDeVariacion"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaDeIndicador"
+          }
+        }
+      },
+      "TerritorioPublico": {
+        "required": [
+          "id",
+          "nombre",
+          "nivel",
+          "padre",
+          "fuente",
+          "desglosado",
+          "con_datos_de"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "nivel": {
+            "type": "string"
+          },
+          "padre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fuente": {
+            "type": "string"
+          },
+          "desglosado": {
+            "type": "boolean"
+          },
+          "con_datos_de": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "TipoPublico": {
+        "required": [
+          "id",
+          "nombre"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Catálogos"
+    },
+    {
+      "name": "Series"
+    },
+    {
+      "name": "Indicadores"
+    }
+  ]
+}

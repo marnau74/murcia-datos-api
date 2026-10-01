@@ -81,20 +81,40 @@ builder.Services.AddCors(opciones => opciones.AddDefaultPolicy(politica => polit
     .SetPreflightMaxAge(TimeSpan.FromHours(1))));
 
 // Detrás de un proxy (Caddy, Render…) la IP real del cliente llega en X-Forwarded-For.
-if (builder.Configuration.GetValue<bool>("Proxy:ConfiarEnCabecerasReenviadas"))
+// (La configuración se lee al construir las opciones, no antes, para que los tests puedan cambiarla.)
+builder.Services.AddOptions<ForwardedHeadersOptions>().Configure<IConfiguration>((opciones, configuracion) =>
 {
-    builder.Services.Configure<ForwardedHeadersOptions>(opciones =>
+    if (!configuracion.GetValue<bool>("Proxy:ConfiarEnCabecerasReenviadas"))
     {
-        opciones.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-        opciones.KnownIPNetworks.Clear();
-        opciones.KnownProxies.Clear();
-        opciones.ForwardLimit = 1;
-    });
-}
+        opciones.ForwardedHeaders = ForwardedHeaders.None;
+        return;
+    }
+
+    opciones.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    opciones.KnownIPNetworks.Clear();
+    opciones.KnownProxies.Clear();
+    opciones.ForwardLimit = 1;
+});
 
 // ---- Documentación ----------------------------------------------------------------------------------
-builder.Services.AddOpenApi("v1", opciones => opciones.AddDocumentTransformer((documento, _, _) =>
+builder.Services.AddOpenApi("v1", opciones =>
 {
+    // Las series se pueden pedir también como CSV: se anota en la respuesta 200 junto al JSON.
+    opciones.AddOperationTransformer((operacion, contexto, _) =>
+    {
+        if (contexto.Description.RelativePath?.StartsWith("v1/", StringComparison.Ordinal) == true
+            && contexto.Description.RelativePath is "v1/demanda" or "v1/oferta" or "v1/precios"
+            && operacion.Responses?.TryGetValue("200", out var ok) == true
+            && ok.Content is not null)
+        {
+            ok.Content["text/csv"] = new OpenApiMediaType { Schema = new OpenApiSchema { Type = JsonSchemaType.String } };
+        }
+
+        return Task.CompletedTask;
+    });
+
+    opciones.AddDocumentTransformer((documento, _, _) =>
+    {
     documento.Info = new OpenApiInfo
     {
         Title = "API de datos de turismo de Murcia",
@@ -114,17 +134,15 @@ builder.Services.AddOpenApi("v1", opciones => opciones.AddDocumentTransformer((d
     };
 
     return Task.CompletedTask;
-}));
+    });
+});
 
 builder.Services.ConfigurarTelemetria(builder.Configuration);
 
 var app = builder.Build();
 
 // ---- Tubería HTTP -----------------------------------------------------------------------------------
-if (builder.Configuration.GetValue<bool>("Proxy:ConfiarEnCabecerasReenviadas"))
-{
-    app.UseForwardedHeaders();
-}
+app.UseForwardedHeaders();
 
 if (!app.Environment.IsDevelopment())
 {
