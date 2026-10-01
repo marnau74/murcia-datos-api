@@ -145,6 +145,22 @@ public class CabecerasYCorsTests(ApiCompartida compartida) : IClassFixture<ApiCo
     }
 
     [Fact]
+    public async Task La_politica_de_contenido_permite_el_importmap_de_blazor_por_su_hash_y_no_por_unsafe_inline()
+    {
+        using var respuesta = await _cliente.GetAsync("/", TestContext.Current.CancellationToken);
+        var pagina = await respuesta.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        // El navegador calcula el hash sobre el script con los saltos de línea normalizados a LF.
+        var importmap = System.Text.RegularExpressions.Regex.Match(pagina, "<script type=\"importmap\">(?<c>.*?)</script>", System.Text.RegularExpressions.RegexOptions.Singleline).Groups["c"].Value;
+        var hash = Convert.ToBase64String(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(importmap.ReplaceLineEndings("\n"))));
+
+        importmap.ShouldNotBeNullOrWhiteSpace();
+        respuesta.Una("Content-Security-Policy").ShouldContain($"'sha256-{hash}'");
+        respuesta.Una("Content-Security-Policy").ShouldNotContain("unsafe-inline");
+        pagina.ShouldNotContain("<script>"); // ningún otro script en línea
+    }
+
+    [Fact]
     public async Task La_documentacion_de_la_api_queda_fuera_de_la_politica_estricta_porque_usa_scripts_en_linea()
     {
         using var respuesta = await _cliente.GetAsync("/scalar/v1", TestContext.Current.CancellationToken);

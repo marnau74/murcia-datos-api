@@ -116,11 +116,11 @@ builder.Services.AddOpenApi("v1", opciones =>
 
     opciones.AddDocumentTransformer((documento, _, _) =>
     {
-    documento.Info = new OpenApiInfo
-    {
-        Title = "API de datos de turismo de Murcia",
-        Version = "1.0.0",
-        Description = """
+        documento.Info = new OpenApiInfo
+        {
+            Title = "API de datos de turismo de Murcia",
+            Version = "1.0.0",
+            Description = """
             Demanda, oferta y precios del alojamiento turístico en la Región de Murcia (INE y murciaturistica.es), servidos desde la
             release mensual del proyecto murcia-open-data.
 
@@ -131,10 +131,10 @@ builder.Services.AddOpenApi("v1", opciones =>
             - Los errores son `application/problem+json` (RFC 9457) y enumeran los valores permitidos.
             - JSON o CSV (`formato=csv` o `Accept: text/csv`; `excel=true` para abrirlo directamente en Excel en español).
             - Caché: `ETag` y `If-None-Match` (304). Límite de peticiones por IP: cabeceras `RateLimit-*`; al pasarse, 429 con `Retry-After`.
-            """,
-    };
+            """.ReplaceLineEndings("\n"),
+        };
 
-    return Task.CompletedTask;
+        return Task.CompletedTask;
     });
 });
 
