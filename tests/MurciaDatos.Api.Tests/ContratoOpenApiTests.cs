@@ -40,7 +40,9 @@ public class ContratoOpenApiTests(ApiCompartida compartida) : IClassFixture<ApiC
     [Fact]
     public async Task El_contrato_publicado_es_el_que_esta_guardado_en_el_repositorio()
     {
-        var actual = (await ObtenerContratoAsync()).ToJsonString(Formato).ReplaceLineEndings("\n") + "\n";
+        // Los saltos de línea de dentro de las descripciones (que salen de los comentarios XML) dependen del sistema
+        // donde se compile: en el JSON aparecen escapados, así que se normalizan también.
+        var actual = (await ObtenerContratoAsync()).ToJsonString(Formato).ReplaceLineEndings("\n").Replace("\\r\\n", "\\n", StringComparison.Ordinal) + "\n";
         var ruta = RutaSnapshot();
 
         if (Environment.GetEnvironmentVariable("ACTUALIZAR_CONTRATO") == "1")
@@ -51,7 +53,7 @@ public class ContratoOpenApiTests(ApiCompartida compartida) : IClassFixture<ApiC
         }
 
         File.Exists(ruta).ShouldBeTrue("falta Contrato/openapi.v1.json: genéralo con ACTUALIZAR_CONTRATO=1");
-        var guardado = (await File.ReadAllTextAsync(ruta, TestContext.Current.CancellationToken)).ReplaceLineEndings("\n");
+        var guardado = (await File.ReadAllTextAsync(ruta, TestContext.Current.CancellationToken)).ReplaceLineEndings("\n").Replace("\\r\\n", "\\n", StringComparison.Ordinal);
 
         actual.ShouldBe(guardado, "el contrato de la API ha cambiado; si es intencionado, actualiza el fichero con ACTUALIZAR_CONTRATO=1 y revisa el diff");
     }

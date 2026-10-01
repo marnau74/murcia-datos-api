@@ -1299,7 +1299,7 @@
             "$ref": "#/components/schemas/MetaDeSerie"
           }
         },
-        "description": "Respuesta de las series. Cada fila de `datos` tiene las claves `periodo`, `territorio`, `tipo`,\r\n(`residencia` en la demanda), `fuente`, `meses` (si se agrega), `provisional` y una clave por medida pedida.\r\nUn dato que no existe es `null`, nunca 0."
+        "description": "Respuesta de las series. Cada fila de `datos` tiene las claves `periodo`, `territorio`, `tipo`,\n(`residencia` en la demanda), `fuente`, `meses` (si se agrega), `provisional` y una clave por medida pedida.\nUn dato que no existe es `null`, nunca 0."
       },
       "RespuestaDeVariacion": {
         "required": [
