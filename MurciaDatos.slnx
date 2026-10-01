@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MurciaDatos.Datos/MurciaDatos.Datos.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MurciaDatos.Datos.Tests/MurciaDatos.Datos.Tests.csproj" />
+    <Project Path="tests/MurciaDatos.Tests.Comunes/MurciaDatos.Tests.Comunes.csproj" />
+  </Folder>
+</Solution>
