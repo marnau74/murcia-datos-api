@@ -13,6 +13,10 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y 
 ### Cambiado
 - `publicar` pasa la CI completa antes de construir y publicar la imagen.
 
+### Seguridad
+- Las acciones de GitHub van fijadas por SHA (con la versión en un comentario) en lugar de por
+  etiqueta, que su autor puede mover; Dependabot las actualiza agrupadas.
+
 ## [1.0.0] — 2026-10-01
 
 Primera versión completa.
