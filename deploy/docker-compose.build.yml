@@ -1,0 +1,8 @@
+# Construye la imagen desde el código en lugar de descargarla de GHCR (para probar el despliegue en local):
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: murcia-datos-api:local

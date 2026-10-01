@@ -1,0 +1,22 @@
+# Caddy: HTTPS automático (Let's Encrypt) y proxy inverso hacia la API. Es lo único expuesto a internet.
+#
+# DOMINIO puede ser un dominio propio (datos.ejemplo.com) o, si no tienes uno, una dirección «sslip.io» que apunta a tu
+# servidor: para la IP 203.0.113.7 es 203-0-113-7.sslip.io. En pruebas locales, «http://localhost» sirve sin HTTPS.
+{$DOMINIO} {
+	encode zstd gzip
+
+	# Las sondas de salud son para Docker: de fuera no hacen falta y no cuesta nada esconderlas.
+	@interno path /health /health/*
+	respond @interno 404
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	# La política de contenido (CSP) NO se pone aquí: la envía la propia API, que conoce el hash del importmap de Blazor.
+	# Si Caddy la sobrescribiera, el explorador dejaría de arrancar.
+	reverse_proxy api:8080 {
+		header_up X-Forwarded-Proto {scheme}
+	}
+}

@@ -1,0 +1,64 @@
+# La API de datos de turismo de Murcia en un VPS: la API (con el explorador dentro) y Caddy (HTTPS).
+#
+# Es un servicio sin estado y de solo lectura: no hay base de datos. Lo único que guarda es un volumen con la última
+# versión de los datos descargada, para poder arrancar al instante aunque GitHub no responda.
+# Solo Caddy publica puertos (80 y 443).
+#
+#   cp .env.example .env    # y rellénalo (ver docs/despliegue.md)
+#   docker compose pull && docker compose up -d
+
+name: murcia-datos-api
+
+services:
+  api:
+    image: ghcr.io/${PROPIETARIO:?Falta PROPIETARIO en .env}/murcia-datos-api:${VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      # La API está detrás de Caddy: la IP real del cliente llega en X-Forwarded-For (sin esto, todas las peticiones
+      # parecerían de Caddy y compartirían un solo límite de peticiones).
+      Proxy__ConfiarEnCabecerasReenviadas: "true"
+      Limites__PeticionesPorVentana: ${LIMITE_PETICIONES:-120}
+      Datos__Repositorio: ${REPOSITORIO_DE_DATOS:-marnau74/murcia-open-data}
+    volumes:
+      - datos:/datos
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    healthcheck:
+      # La imagen no trae curl: se hace la petición con /dev/tcp, que es de bash (CMD-SHELL usaría sh, que no lo tiene).
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health/ready HTTP/1.0\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q ' 200 '"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMINIO: ${DOMINIO:?Falta DOMINIO en .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_datos:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  datos:
+  caddy_datos:
+  caddy_config:

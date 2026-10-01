@@ -237,6 +237,22 @@ public class HomeTests : BunitContext
     }
 
     [Fact]
+    public void Un_destino_cuya_zona_no_tiene_datos_se_cuelga_de_la_region()
+    {
+        var territorios = new List<TerritorioApi>
+        {
+            new("region-murcia", "Región de Murcia", "region", "espana", "INE", ["demanda"]),
+            new("zona-costa", "Costa", "zona_mt", "region-murcia", "murciaturistica", []),
+            new("destino-la-manga", "La Manga", "destino_mt", "zona-costa", "murciaturistica", ["demanda"]),
+            new("cartagena", "Cartagena", "punto_ine", "region-murcia", "INE", ["demanda"]),
+        };
+
+        var orden = Home.EnJerarquia(territorios, t => t.ConDatosDe.Contains("demanda")).Select(t => (t.Territorio.Id, t.Nivel)).ToList();
+
+        orden.ShouldBe([("region-murcia", 0), ("cartagena", 1), ("destino-la-manga", 1)]);
+    }
+
+    [Fact]
     public void Un_error_de_la_api_se_enseña_con_el_detalle_por_parametro()
     {
         Preparar((_, _) => throw new ErrorDeApiException("Parámetros no válidos", "Alguno no es válido.", new Dictionary<string, string[]> { ["desde"] = ["no es un mes válido"] }));

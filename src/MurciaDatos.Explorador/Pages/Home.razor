@@ -73,9 +73,9 @@
 
                 <fieldset class="lista-larga">
                     <legend>Territorio</legend>
-                    @foreach (var t in TerritoriosDisponibles)
+                    @foreach (var (t, nivel) in TerritoriosDisponibles)
                     {
-                        <label class="casilla nivel-@Sangria(t)">
+                        <label class="casilla nivel-@Math.Min(nivel, 2)">
                             <input type="checkbox" checked="@_estado.Territorios.Contains(t.Id)" @onchange="e => AlternarTerritorio(t.Id, (bool)(e.Value ?? false))" />
                             <span>@t.Nombre <small>@t.Fuente</small></span>
                         </label>
@@ -299,29 +299,49 @@
 
     private RangoApi? Disponibilidad => _catalogos?.Metadatos.Disponibilidad.GetValueOrDefault(_estado.Recurso);
 
-    private IEnumerable<TerritorioApi> TerritoriosDisponibles => EnJerarquia(_catalogos?.Territorios.Where(t => t.ConDatosDe.Contains(_estado.Recurso)).ToList() ?? []);
+    private IEnumerable<(TerritorioApi Territorio, int Nivel)> TerritoriosDisponibles =>
+        _catalogos is null ? [] : EnJerarquia(_catalogos.Territorios, t => t.ConDatosDe.Contains(_estado.Recurso));
 
-    /// <summary>Los territorios en orden de jerarquía: cada uno detrás de su padre y los hermanos por nombre.</summary>
-    internal static IEnumerable<TerritorioApi> EnJerarquia(IReadOnlyList<TerritorioApi> territorios)
+    /// <summary>
+    /// Los territorios con datos en orden de jerarquía (cada uno detrás de su padre y los hermanos por nombre), con su
+    /// profundidad. Si el padre directo no tiene datos (una zona vacía) se cuelga del antepasado más cercano que sí los tenga.
+    /// </summary>
+    internal static IEnumerable<(TerritorioApi Territorio, int Nivel)> EnJerarquia(IReadOnlyList<TerritorioApi> todos, Func<TerritorioApi, bool> conDatos)
     {
-        var ids = territorios.Select(t => t.Id).ToHashSet(StringComparer.Ordinal);
-        IEnumerable<TerritorioApi> Hijos(string? padre) => territorios
-            .Where(t => padre is null ? t.Padre is null || !ids.Contains(t.Padre) : t.Padre == padre)
-            .OrderBy(t => t.Nombre, StringComparer.CurrentCulture);
+        var porId = todos.ToDictionary(t => t.Id, StringComparer.Ordinal);
+        var disponibles = todos.Where(conDatos).ToList();
 
-        IEnumerable<TerritorioApi> Recorrer(string? padre)
+        string? AntepasadoConDatos(TerritorioApi t)
         {
-            foreach (var hijo in Hijos(padre))
+            var padre = t.Padre;
+            while (padre is not null && porId.TryGetValue(padre, out var p))
             {
-                yield return hijo;
-                foreach (var nieto in Recorrer(hijo.Id))
+                if (conDatos(p))
                 {
-                    yield return nieto;
+                    return p.Id;
+                }
+
+                padre = p.Padre;
+            }
+
+            return null;
+        }
+
+        var padres = disponibles.ToDictionary(t => t.Id, AntepasadoConDatos, StringComparer.Ordinal);
+
+        IEnumerable<(TerritorioApi, int)> Recorrer(string? padre, int nivel)
+        {
+            foreach (var hijo in disponibles.Where(t => padres[t.Id] == padre).OrderBy(t => t.Nombre, StringComparer.CurrentCulture))
+            {
+                yield return (hijo, nivel);
+                foreach (var descendiente in Recorrer(hijo.Id, nivel + 1))
+                {
+                    yield return descendiente;
                 }
             }
         }
 
-        return Recorrer(null);
+        return Recorrer(null, 0);
     }
 
     private string ResumenDeLosDatos
@@ -499,7 +519,7 @@
     private Task CambiarRecurso(string recurso) => Aplicar(EstadoDeConsulta.Inicial(recurso) with { Agregacion = _estado.Agregacion, Desde = _estado.Desde, Hasta = _estado.Hasta });
 
     private Task AlternarTerritorio(string id, bool marcado) =>
-        Aplicar(_estado with { Territorios = Alternar(_estado.Territorios, id, marcado, TerritoriosDisponibles.Select(t => t.Id)) });
+        Aplicar(_estado with { Territorios = Alternar(_estado.Territorios, id, marcado, TerritoriosDisponibles.Select(t => t.Territorio.Id)) });
 
     private Task AlternarTipo(string id, bool marcado) =>
         Aplicar(_estado with { Tipos = Alternar(_estado.Tipos, id, marcado, TiposDisponibles.Select(t => t.Id)) });
@@ -578,13 +598,6 @@
     private static string Etiqueta(string recurso) => recurso switch { "demanda" => "Demanda", "oferta" => "Oferta", _ => "Precios" };
 
     private static string? Vacio(object? valor) => string.IsNullOrEmpty(valor?.ToString()) ? null : valor!.ToString();
-
-    private static string Sangria(TerritorioApi t) => t.Nivel switch
-    {
-        "pais" or "region" => "0",
-        "zona_ine" or "zona_mt" or "punto_ine" => "1",
-        _ => "2",
-    };
 
     public void Dispose()
     {

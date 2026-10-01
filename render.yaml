@@ -1,0 +1,20 @@
+# Plano de despliegue para Render (https://render.com/docs/blueprint-spec).
+# Es un servicio sin estado y de solo lectura: no necesita base de datos ni secretos. Los pasos, en docs/despliegue.md.
+services:
+  - type: web
+    name: murcia-datos-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health/ready
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+
+      # Detrás del proxy de Render, la IP real del cliente llega en X-Forwarded-For.
+      - key: Proxy__ConfiarEnCabecerasReenviadas
+        value: "true"
+
+      # Repositorio del que se descargan las releases de datos.
+      - key: Datos__Repositorio
+        value: marnau74/murcia-open-data
