@@ -114,9 +114,10 @@ La guía de despliegue (Render y VPS con Caddy) está en [`docs/despliegue.md`](
 
 ## Límites conocidos
 
-- La descarga contra la API de GitHub real no se ha probado de extremo a extremo (sí con un servidor HTTP falso
-  y con una carpeta local); lo hace el trabajo `datos-reales` de la CI. Tampoco se han probado Actions, GHCR,
-  Render ni un servidor con certificados.
+- La descarga contra la API de GitHub real se probó de extremo a extremo el 1 de octubre de 2026: el trabajo
+  `datos-reales` arrancó la imagen, descargó la release `datos-2026-09` de `murcia-open-data` con sus sumas y su
+  contrato, y respondió una consulta de cada recurso. Sin probar: Render, un servidor con certificados y que la
+  imagen publicada en GHCR se pueda descargar (el trabajo `publicar` termina bien, pero no se ha consumido).
 - `SHA256SUMS` viaja en la misma release que los datos: protege de descargas corruptas, no de una release manipulada.
 - El límite de peticiones es por instancia.
 - El explorador se publica sin AOT (arranque algo más lento); las gráficas son de líneas, sin zoom.

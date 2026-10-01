@@ -34,8 +34,15 @@ VPS normal, con la misma imagen.
 
 ## Qué no está probado
 
-- El flujo de GitHub Actions (no se ha subido el repositorio), la publicación en GHCR, el despliegue
-  en Render y en un servidor real con certificados.
-- La descarga desde GitHub real: está cubierta con un servidor HTTP falso (selección de la release,
-  rechazo de direcciones ajenas, sumas, contrato) y con la carpeta local, pero no se ha ejecutado
-  contra la API de GitHub.
+- El despliegue en Render y en un servidor real con certificados, y que la imagen publicada en GHCR
+  se pueda descargar (el trabajo `publicar` termina bien, pero nadie la ha consumido).
+
+## Qué se ha probado de verdad
+
+- El flujo de GitHub Actions (formato, tests, CodeQL, construcción y arranque de la imagen) se ejecuta
+  en verde en cada cambio.
+- La descarga desde GitHub real: el 1 de octubre de 2026 el trabajo `datos-reales` arrancó la imagen y
+  descargó la release `datos-2026-09` de `murcia-open-data`, con sus sumas y su contrato, por red. Los
+  controles de calidad pasaron, no hubo problema de actualización y cada recurso respondió una consulta.
+  Antes solo estaba cubierta con un servidor HTTP falso (selección de la release, rechazo de direcciones
+  ajenas, sumas, contrato) y con una carpeta local.
