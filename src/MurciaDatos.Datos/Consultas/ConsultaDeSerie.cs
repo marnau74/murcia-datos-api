@@ -52,7 +52,7 @@ public static class ConsultasDeSeries
         var (sql, parametros) = Construir(consulta, maxFilas);
 
         using var conexion = prestamo.AbrirConexion();
-        using var comando = conexion.CreateCommand();
+        using var comando = conexion.Conexion.CreateCommand();
         comando.CommandText = sql;
         foreach (var valor in parametros)
         {

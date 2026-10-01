@@ -4,6 +4,9 @@
     <Project Path="src/MurciaDatos.Datos/MurciaDatos.Datos.csproj" />
     <Project Path="src/MurciaDatos.Explorador/MurciaDatos.Explorador.csproj" />
   </Folder>
+  <Folder Name="/bench/">
+    <Project Path="bench/MurciaDatos.Benchmarks/MurciaDatos.Benchmarks.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/MurciaDatos.Api.Tests/MurciaDatos.Api.Tests.csproj" />
     <Project Path="tests/MurciaDatos.Datos.Tests/MurciaDatos.Datos.Tests.csproj" />

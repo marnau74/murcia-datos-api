@@ -15,7 +15,13 @@ public sealed record ControlDeCalidad(string Nombre, bool Correcto, string Detal
 public sealed class InstantaneaDatos : IDisposable
 {
     private readonly Lock _cerrojo = new();
+    /// <summary>Hilos que DuckDB puede usar por consulta; ver <see cref="Conectar"/>.</summary>
+    internal const int HilosDeDuckDb = 2;
+
+    private const int MaxConexionesEnReposo = 16;
+
     private readonly DuckDBConnection _ancla;
+    private readonly System.Collections.Concurrent.ConcurrentBag<DuckDBConnection> _enReposo = [];
     private readonly string? _directorioABorrar;
     private int _prestamos;
     private bool _retirada;
@@ -66,7 +72,9 @@ public sealed class InstantaneaDatos : IDisposable
 
     internal static DuckDBConnection Conectar(string ruta)
     {
-        var conexion = new DuckDBConnection($"Data Source={ruta};access_mode=READ_ONLY");
+        // Los datos son pequeños (miles de filas): con todos los hilos de la máquina el coste de repartir el trabajo
+        // supera al de hacerlo (190 ms frente a 3 ms en las mediciones del README), así que se limita a dos.
+        var conexion = new DuckDBConnection($"Data Source={ruta};access_mode=READ_ONLY;threads={HilosDeDuckDb}");
         conexion.Open();
         return conexion;
     }
@@ -122,6 +130,20 @@ public sealed class InstantaneaDatos : IDisposable
         }
     }
 
+    private ConexionPrestada TomarConexion() => new(this, _enReposo.TryTake(out var conexion) ? conexion : Conectar(RutaFichero));
+
+    private void DevolverConexion(DuckDBConnection conexion)
+    {
+        // Si ya está retirada o el grupo está lleno, la conexión se cierra en lugar de guardarla.
+        if (!_retirada && _enReposo.Count < MaxConexionesEnReposo)
+        {
+            _enReposo.Add(conexion);
+            return;
+        }
+
+        conexion.Dispose();
+    }
+
     private void Cerrar()
     {
         lock (_cerrojo)
@@ -132,6 +154,11 @@ public sealed class InstantaneaDatos : IDisposable
             }
 
             _cerrada = true;
+        }
+
+        while (_enReposo.TryTake(out var conexion))
+        {
+            conexion.Dispose();
         }
 
         _ancla.Dispose();
@@ -161,8 +188,35 @@ public sealed class InstantaneaDatos : IDisposable
 
         public InstantaneaDatos Instantanea => _instantanea ?? throw new ObjectDisposedException(nameof(Prestamo));
 
-        public DuckDBConnection AbrirConexion() => Conectar(Instantanea.RutaFichero);
+        /// <summary>
+        /// Una conexión para una consulta, de un grupo de conexiones ya abiertas (abrir una cuesta más que ejecutar una
+        /// consulta pequeña). Hay que devolverla (Dispose) al terminar.
+        /// </summary>
+        public ConexionPrestada AbrirConexion() => Instantanea.TomarConexion();
 
         public void Dispose() => Interlocked.Exchange(ref _instantanea, null)?.Devolver();
+    }
+
+    /// <summary>Una conexión sacada del grupo; al devolverla vuelve a él para la siguiente consulta.</summary>
+    public sealed class ConexionPrestada : IDisposable
+    {
+        private readonly InstantaneaDatos _origen;
+        private DuckDBConnection? _conexion;
+
+        internal ConexionPrestada(InstantaneaDatos origen, DuckDBConnection conexion)
+        {
+            _origen = origen;
+            _conexion = conexion;
+        }
+
+        public DuckDBConnection Conexion => _conexion ?? throw new ObjectDisposedException(nameof(ConexionPrestada));
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _conexion, null) is { } conexion)
+            {
+                _origen.DevolverConexion(conexion);
+            }
+        }
     }
 }
