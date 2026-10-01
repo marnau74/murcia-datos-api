@@ -43,6 +43,12 @@ public static class EndpointsDeDatos
             .WithSummary("Tipos de alojamiento")
             .Produces<Listado<TipoPublico>>();
 
+        v1.MapGet("/medidas", ListarMedidas)
+            .WithName("ListarMedidas").WithTags("Catálogos")
+            .WithSummary("Medidas de cada recurso, con su unidad y cómo se agregan")
+            .WithDescription("`suma` para los flujos (viajeros, pernoctaciones); `media` para existencias, tasas e índices. `solo_mensual`: la medida no se puede promediar entre meses y solo existe con `agregacion=mes`.")
+            .Produces<Listado<MedidaDeRecurso>>();
+
         v1.MapGet("/residencias", ListarResidencias)
             .WithName("ListarResidencias").WithTags("Catálogos")
             .WithSummary("Residencias de los viajeros (España o extranjero)")
@@ -151,12 +157,19 @@ public static class EndpointsDeDatos
     }
 
     private static IResult ListarTipos(HttpContext http, AlmacenDeInstantaneas almacen) =>
-        ListarSimple(http, almacen, c => c.Tipos.Select(t => new TipoPublico(t.Id, t.Nombre)).ToList());
+        ListarSimple(http, almacen, c => c.Tipos.Select(t => new TipoPublico(t.Id, t.Nombre, Recursos(c, d => d.Tipos.Contains(t.Id)))).ToList());
 
     private static IResult ListarResidencias(HttpContext http, AlmacenDeInstantaneas almacen) =>
-        ListarSimple(http, almacen, c => c.Residencias.Select(r => new TipoPublico(r.Id, r.Nombre)).ToList());
+        ListarSimple(http, almacen, c => c.Residencias.Select(r => new TipoPublico(r.Id, r.Nombre, Recursos(c, d => d.Residencias.Contains(r.Id)))).ToList());
 
-    private static IResult ListarSimple(HttpContext http, AlmacenDeInstantaneas almacen, Func<CatalogoDatos, List<TipoPublico>> datos)
+    private static IResult ListarMedidas(HttpContext http, AlmacenDeInstantaneas almacen) =>
+        ListarSimple(http, almacen, _ => Enum.GetValues<Hecho>().SelectMany(h => CatalogoDeMedidas.De(h).Select(m => new MedidaDeRecurso(
+            h.ToString().ToLowerInvariant(), m.Id, m.Unidad, m.Agregado == TipoDeAgregado.Suma ? "suma" : "media", m.Descripcion, m.SoloMensual))).ToList());
+
+    private static List<string> Recursos(CatalogoDatos catalogo, Func<DisponibilidadDeHecho, bool> contiene) =>
+        [.. catalogo.Disponibilidad.Where(d => contiene(d.Value)).Select(d => d.Key.ToString().ToLowerInvariant())];
+
+    private static IResult ListarSimple<T>(HttpContext http, AlmacenDeInstantaneas almacen, Func<CatalogoDatos, List<T>> datos)
     {
         using var prestamo = almacen.Prestar();
         if (prestamo is null)
@@ -171,7 +184,7 @@ public static class EndpointsDeDatos
         }
 
         PonerCabecerasDeCache(http);
-        return Results.Json(new Listado<TipoPublico>(datos(instantanea.Catalogo), new MetaDeListado(instantanea.Etiqueta)));
+        return Results.Json(new Listado<T>(datos(instantanea.Catalogo), new MetaDeListado(instantanea.Etiqueta)));
     }
 
     // ---- Series ------------------------------------------------------------------------------------------

@@ -1,7 +1,595 @@
-﻿@page "/"
+@page "/"
+@implements IDisposable
+@inject IClienteApi Api
+@inject NavigationManager Navegacion
+@inject IJSRuntime JS
+@using MurciaDatos.Explorador.Componentes
+@using MurciaDatos.Explorador.Logica
+@using MurciaDatos.Explorador.Servicios
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Explorador · Datos de turismo de Murcia</PageTitle>
 
-<h1>Hello, world!</h1>
+<header class="cabecera">
+    <div class="envoltorio">
+        <p class="marca">Datos de turismo de Murcia</p>
+        <nav aria-label="Documentación">
+            <a href="scalar" target="_blank" rel="noopener">Documentación de la API</a>
+            <a href="openapi/v1.json" target="_blank" rel="noopener">OpenAPI</a>
+        </nav>
+    </div>
+</header>
 
-Welcome to your new app.
+<main class="envoltorio">
+    <h1>Explorador</h1>
+    <p class="entradilla">Demanda, oferta y precios del alojamiento turístico en la Región de Murcia. Lo que ves aquí lo pide a la API pública: abajo tienes la llamada equivalente para usarla donde quieras.</p>
+
+    @if (_errorCatalogos is not null)
+    {
+        <div class="aviso aviso-error" role="alert">
+            <strong>No se han podido cargar los datos.</strong>
+            <span>@_errorCatalogos</span>
+            <button type="button" class="boton" @onclick="Reintentar">Reintentar</button>
+        </div>
+    }
+    else if (_catalogos is null)
+    {
+        <p class="cargando" role="status">Cargando el catálogo…</p>
+    }
+    else
+    {
+        <p class="datos-version">Datos <strong>@_catalogos.Metadatos.VersionDatos</strong>@ResumenDeLosDatos</p>
+
+        <div class="cuadricula">
+            <section class="filtros" aria-label="Filtros">
+                <fieldset>
+                    <legend>Qué quieres ver</legend>
+                    <div class="segmentos" role="radiogroup" aria-label="Recurso">
+                        @foreach (var recurso in EstadoDeConsulta.Recursos)
+                        {
+                            <label class="segmento @(_estado.Recurso == recurso ? "activo" : "")">
+                                <input type="radio" name="recurso" value="@recurso" checked="@(_estado.Recurso == recurso)" @onchange="() => CambiarRecurso(recurso)" />
+                                @Etiqueta(recurso)
+                            </label>
+                        }
+                    </div>
+                </fieldset>
+
+                <fieldset>
+                    <legend>Medida</legend>
+                    <label class="campo">
+                        <span class="visualmente-oculto">Medida</span>
+                        <select value="@_estado.Medida" @onchange="e => Aplicar(_estado with { Medida = e.Value?.ToString() ?? _estado.Medida })">
+                            @foreach (var medida in MedidasDisponibles)
+                            {
+                                <option value="@medida.Id">@medida.Descripcion (@medida.Unidad)</option>
+                            }
+                        </select>
+                    </label>
+                    @if (MedidaActual is { } actual && _estado.Agregacion != "mes")
+                    {
+                        <p class="nota">Al agrupar, @(actual.Agregado == "suma" ? "se suman los meses" : "se hace la media de los meses").</p>
+                    }
+                </fieldset>
+
+                <fieldset class="lista-larga">
+                    <legend>Territorio</legend>
+                    @foreach (var t in TerritoriosDisponibles)
+                    {
+                        <label class="casilla nivel-@Sangria(t)">
+                            <input type="checkbox" checked="@_estado.Territorios.Contains(t.Id)" @onchange="e => AlternarTerritorio(t.Id, (bool)(e.Value ?? false))" />
+                            <span>@t.Nombre <small>@t.Fuente</small></span>
+                        </label>
+                    }
+                </fieldset>
+
+                <fieldset>
+                    <legend>Tipo de alojamiento</legend>
+                    @foreach (var t in TiposDisponibles)
+                    {
+                        <label class="casilla">
+                            <input type="checkbox" checked="@_estado.Tipos.Contains(t.Id)" @onchange="e => AlternarTipo(t.Id, (bool)(e.Value ?? false))" />
+                            <span>@t.Nombre</span>
+                        </label>
+                    }
+                </fieldset>
+
+                @if (_estado.Recurso == "demanda")
+                {
+                    <fieldset>
+                        <legend>Residencia de los viajeros</legend>
+                        @foreach (var (valor, texto) in Residencias)
+                        {
+                            <label class="casilla">
+                                <input type="radio" name="residencia" value="@valor" checked="@(_estado.Residencia == valor)" @onchange="() => Aplicar(_estado with { Residencia = valor })" />
+                                <span>@texto</span>
+                            </label>
+                        }
+                    </fieldset>
+                }
+
+                <fieldset>
+                    <legend>Periodo</legend>
+                    <div class="par">
+                        <label class="campo">
+                            <span>Desde</span>
+                            <select value="@(_estado.Desde ?? "")" @onchange="e => Aplicar(_estado with { Desde = Vacio(e.Value) })">
+                                <option value="">Primer mes</option>
+                                @foreach (var mes in Meses)
+                                {
+                                    <option value="@mes">@mes</option>
+                                }
+                            </select>
+                        </label>
+                        <label class="campo">
+                            <span>Hasta</span>
+                            <select value="@(_estado.Hasta ?? "")" @onchange="e => Aplicar(_estado with { Hasta = Vacio(e.Value) })">
+                                <option value="">Último mes</option>
+                                @foreach (var mes in Meses)
+                                {
+                                    <option value="@mes">@mes</option>
+                                }
+                            </select>
+                        </label>
+                    </div>
+                    <div class="segmentos" role="radiogroup" aria-label="Agrupar por">
+                        @foreach (var (valor, texto) in Agregaciones)
+                        {
+                            <label class="segmento @(_estado.Agregacion == valor ? "activo" : "")">
+                                <input type="radio" name="agregacion" value="@valor" checked="@(_estado.Agregacion == valor)" @onchange="() => Aplicar(_estado with { Agregacion = valor })" />
+                                @texto
+                            </label>
+                        }
+                    </div>
+                </fieldset>
+            </section>
+
+            <section class="resultado" aria-label="Resultado" aria-busy="@(_cargando ? "true" : "false")">
+                @if (_error is not null)
+                {
+                    <div class="aviso aviso-error" role="alert">
+                        <strong>@_error.Titulo</strong>
+                        <span>@_error.Message</span>
+                        @if (_error.Errores.Count > 0)
+                        {
+                            <ul>
+                                @foreach (var (parametro, mensajes) in _error.Errores)
+                                {
+                                    @foreach (var mensaje in mensajes)
+                                    {
+                                        <li><code>@parametro</code>: @mensaje</li>
+                                    }
+                                }
+                            </ul>
+                        }
+                    </div>
+                }
+                else if (_respuesta is null)
+                {
+                    <p class="cargando" role="status">Cargando…</p>
+                }
+                else
+                {
+                    <h2>@MedidaActual?.Descripcion</h2>
+                    <p class="subtitulo" aria-live="polite">@_respuesta.Datos.Count @(_respuesta.Datos.Count == 1 ? "fila" : "filas")@(_cargando ? " · actualizando…" : "")</p>
+
+                    @if (_series.Count > 8)
+                    {
+                        <p class="aviso">Hay @_series.Count series y la gráfica distingue como máximo 8: se muestran las 8 primeras. Acota el territorio o el tipo; la tabla sí incluye todo.</p>
+                    }
+
+                    @if (_seriesSinDatos.Count > 0)
+                    {
+                        <p class="nota">Sin datos para esta medida: @string.Join(", ", _seriesSinDatos.Select(s => s.Nombre)).</p>
+                    }
+
+                    <GraficaDeLineas Series="@_series.Take(8).ToList()" Unidad="@(MedidaActual?.Unidad ?? "")" BaseCero="@(MedidaActual?.Unidad is not ("índice" or "%"))" Titulo="@(MedidaActual?.Descripcion ?? "Serie")" />
+
+                    @if (_respuesta.Datos.Any(f => ConstructorDeSeries.Texto(f, "periodo") != "" && f.TryGetValue("provisional", out var p) && p.ValueKind == System.Text.Json.JsonValueKind.True))
+                    {
+                        <p class="nota">Los datos provisionales (<span class="marca-prov">prov.</span>) pueden cambiar cuando el INE los revise.</p>
+                    }
+
+                    <div class="tabla-envoltorio" tabindex="0" role="region" aria-label="Tabla de datos">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th scope="col">Periodo</th>
+                                    <th scope="col">Territorio</th>
+                                    <th scope="col">Tipo</th>
+                                    @if (_estado.Recurso == "demanda")
+                                    {
+                                        <th scope="col">Residencia</th>
+                                    }
+                                    @if (_estado.Agregacion != "mes")
+                                    {
+                                        <th scope="col" class="num">Meses</th>
+                                    }
+                                    <th scope="col" class="num">@MedidaActual?.Unidad</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var fila in _respuesta.Datos.Take(_todasLasFilas ? int.MaxValue : 100))
+                                {
+                                    <tr>
+                                        <th scope="row">@ConstructorDeSeries.Texto(fila, "periodo")</th>
+                                        <td>@NombreDeTerritorio(ConstructorDeSeries.Texto(fila, "territorio"))</td>
+                                        <td>@NombreDeTipo(ConstructorDeSeries.Texto(fila, "tipo"))</td>
+                                        @if (_estado.Recurso == "demanda")
+                                        {
+                                            <td>@NombreDeResidencia(ConstructorDeSeries.Texto(fila, "residencia"))</td>
+                                        }
+                                        @if (_estado.Agregacion != "mes")
+                                        {
+                                            <td class="num">@(fila.TryGetValue("meses", out var m) ? m.ToString() : "")</td>
+                                        }
+                                        <td class="num">
+                                            @Formato.Valor(ConstructorDeSeries.Numero(fila, _estado.Medida), MedidaActual?.Unidad ?? "")
+                                            @if (fila.TryGetValue("provisional", out var prov) && prov.ValueKind == System.Text.Json.JsonValueKind.True)
+                                            {
+                                                <span class="marca-prov">prov.</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    @if (!_todasLasFilas && _respuesta.Datos.Count > 100)
+                    {
+                        <button type="button" class="boton" @onclick="() => _todasLasFilas = true">Mostrar las @_respuesta.Datos.Count filas</button>
+                    }
+
+                    <section class="llamada" aria-labelledby="h-llamada">
+                        <h2 id="h-llamada">La misma consulta, en la API</h2>
+                        <p class="nota">Es una petición <code>GET</code> normal: no hace falta clave. Cámbiale lo que quieras.</p>
+
+                        @foreach (var (titulo, texto) in Llamadas)
+                        {
+                            <div class="bloque">
+                                <div class="bloque-cabecera">
+                                    <span>@titulo</span>
+                                    <button type="button" class="boton boton-pequeno" @onclick="() => Copiar(titulo, texto)">@(_copiado == titulo ? "Copiado" : "Copiar")</button>
+                                </div>
+                                <pre><code>@texto</code></pre>
+                            </div>
+                        }
+
+                        <p class="descargas">
+                            <a class="boton" href="@ConstructorDeLlamadas.Direccion(UrlBase, _estado, "csv")" download="@($"{_estado.Recurso}.csv")">Descargar CSV</a>
+                            <a class="boton" href="@ConstructorDeLlamadas.Direccion(UrlBase, _estado, "csv", excel: true)" download="@($"{_estado.Recurso}-excel.csv")">CSV para Excel</a>
+                        </p>
+                        <p class="nota">En Excel: Datos → Obtener datos → Desde web, y pega la URL del CSV. El «CSV para Excel» usa punto y coma y decimales con coma.</p>
+                    </section>
+                }
+            </section>
+        </div>
+    }
+</main>
+
+<footer class="pie">
+    <div class="envoltorio">
+        <p>Los datos pertenecen a sus autores (INE, Instituto de Turismo de la Región de Murcia y CREM); aquí se publican datos derivados, con atribución. Un mes sin dato es «—», nunca un cero.</p>
+    </div>
+</footer>
+
+@code {
+    private static readonly (string Valor, string Texto)[] Residencias =
+    [
+        ("total", "Total"),
+        ("espana", "Residentes en España"),
+        ("extranjero", "Residentes en el extranjero"),
+        ("separadas", "Las dos por separado"),
+    ];
+
+    private static readonly (string Valor, string Texto)[] Agregaciones = [("mes", "Mes"), ("trimestre", "Trimestre"), ("anio", "Año")];
+
+    private Catalogos? _catalogos;
+    private string? _errorCatalogos;
+    private EstadoDeConsulta _estado = new();
+    private RespuestaSerieApi? _respuesta;
+    private IReadOnlyList<SerieGrafica> _series = [];
+    private IReadOnlyList<SerieGrafica> _seriesSinDatos = [];
+    private ErrorDeApiException? _error;
+    private bool _cargando;
+    private bool _todasLasFilas;
+    private string? _copiado;
+    private CancellationTokenSource? _peticion;
+
+    private string UrlBase => Navegacion.BaseUri;
+
+    private RangoApi? Disponibilidad => _catalogos?.Metadatos.Disponibilidad.GetValueOrDefault(_estado.Recurso);
+
+    private IEnumerable<TerritorioApi> TerritoriosDisponibles => EnJerarquia(_catalogos?.Territorios.Where(t => t.ConDatosDe.Contains(_estado.Recurso)).ToList() ?? []);
+
+    /// <summary>Los territorios en orden de jerarquía: cada uno detrás de su padre y los hermanos por nombre.</summary>
+    internal static IEnumerable<TerritorioApi> EnJerarquia(IReadOnlyList<TerritorioApi> territorios)
+    {
+        var ids = territorios.Select(t => t.Id).ToHashSet(StringComparer.Ordinal);
+        IEnumerable<TerritorioApi> Hijos(string? padre) => territorios
+            .Where(t => padre is null ? t.Padre is null || !ids.Contains(t.Padre) : t.Padre == padre)
+            .OrderBy(t => t.Nombre, StringComparer.CurrentCulture);
+
+        IEnumerable<TerritorioApi> Recorrer(string? padre)
+        {
+            foreach (var hijo in Hijos(padre))
+            {
+                yield return hijo;
+                foreach (var nieto in Recorrer(hijo.Id))
+                {
+                    yield return nieto;
+                }
+            }
+        }
+
+        return Recorrer(null);
+    }
+
+    private string ResumenDeLosDatos
+    {
+        get
+        {
+            var partes = new List<string>();
+            if (Disponibilidad is { } d)
+            {
+                partes.Add($"{_estado.Recurso} de {d.Desde} a {d.Hasta}");
+                if (d.ProvisionalDesde is { } provisional)
+                {
+                    partes.Add($"provisionales desde {provisional}");
+                }
+            }
+
+            partes.Add("Fuentes: " + string.Join("; ", _catalogos!.Metadatos.Fuentes));
+            return " · " + string.Join(" · ", partes);
+        }
+    }
+
+    private IEnumerable<OpcionApi> TiposDisponibles => _catalogos?.Tipos.Where(t => t.ConDatosDe.Contains(_estado.Recurso)) ?? [];
+
+    private IEnumerable<MedidaApi> MedidasDisponibles =>
+        _catalogos?.Medidas.Where(m => m.Recurso == _estado.Recurso && (!m.SoloMensual || _estado.Agregacion == "mes")) ?? [];
+
+    private MedidaApi? MedidaActual => _catalogos?.Medidas.FirstOrDefault(m => m.Recurso == _estado.Recurso && m.Id == _estado.Medida);
+
+    private IEnumerable<string> Meses
+    {
+        get
+        {
+            if (Disponibilidad is not { } d)
+            {
+                yield break;
+            }
+
+            var (anio, mes) = (int.Parse(d.Desde[..4]), int.Parse(d.Desde[5..]));
+            var (anioFin, mesFin) = (int.Parse(d.Hasta[..4]), int.Parse(d.Hasta[5..]));
+            while (anio < anioFin || (anio == anioFin && mes <= mesFin))
+            {
+                yield return $"{anio:0000}-{mes:00}";
+                if (++mes > 12)
+                {
+                    (anio, mes) = (anio + 1, 1);
+                }
+            }
+        }
+    }
+
+    private IEnumerable<(string Titulo, string Texto)> Llamadas
+    {
+        get
+        {
+            yield return ("curl (JSON)", ConstructorDeLlamadas.Curl(UrlBase, _estado));
+            yield return ("curl (CSV)", ConstructorDeLlamadas.CurlCsv(UrlBase, _estado));
+            yield return ("Python (pandas)", ConstructorDeLlamadas.Python(UrlBase, _estado));
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Navegacion.LocationChanged += AlCambiarLaUrl;
+        await CargarCatalogosAsync();
+    }
+
+    private async Task CargarCatalogosAsync()
+    {
+        _errorCatalogos = null;
+        try
+        {
+            _catalogos = await Api.CargarCatalogosAsync();
+        }
+        catch (Exception ex) when (ex is ErrorDeApiException or HttpRequestException or TaskCanceledException)
+        {
+            _errorCatalogos = ex is ErrorDeApiException e ? e.Message : "No hay conexión con la API.";
+            return;
+        }
+
+        var deLaUrl = EstadoDeConsulta.DesdeLaPagina(new Uri(Navegacion.Uri).Query);
+        await Aplicar(deLaUrl, empujarEnLaUrl: false);
+    }
+
+    private async Task Reintentar() => await CargarCatalogosAsync();
+
+    /// <summary>Atrás y adelante del navegador: la URL manda.</summary>
+    private async void AlCambiarLaUrl(object? remitente, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        if (_catalogos is null)
+        {
+            return;
+        }
+
+        var deLaUrl = Normalizar(EstadoDeConsulta.DesdeLaPagina(new Uri(e.Location).Query));
+        if (!deLaUrl.EquivaleA(_estado))
+        {
+            await InvokeAsync(async () => await Aplicar(deLaUrl, empujarEnLaUrl: false));
+        }
+    }
+
+    private async Task Aplicar(EstadoDeConsulta nuevo, bool empujarEnLaUrl = true)
+    {
+        var normalizado = Normalizar(nuevo);
+        var cambia = !normalizado.EquivaleA(_estado) || _respuesta is null;
+        _estado = normalizado;
+
+        if (empujarEnLaUrl)
+        {
+            Navegacion.NavigateTo("/" + _estado.ParaLaPagina());
+        }
+        else
+        {
+            // Primera carga o atrás/adelante: la URL se deja en su forma canónica sin añadir historial.
+            var canonica = "/" + _estado.ParaLaPagina();
+            if (new Uri(Navegacion.Uri).PathAndQuery != canonica)
+            {
+                Navegacion.NavigateTo(canonica, replace: true);
+            }
+        }
+
+        if (cambia)
+        {
+            await CargarSerieAsync();
+        }
+    }
+
+    private async Task CargarSerieAsync()
+    {
+        _peticion?.Cancel();
+        _peticion?.Dispose();
+        _peticion = new CancellationTokenSource();
+        var token = _peticion.Token;
+
+        _cargando = true;
+        _todasLasFilas = false;
+        StateHasChanged();
+
+        try
+        {
+            var respuesta = await Api.CargarSerieAsync(_estado.Recurso, _estado.ConsultaApi(), token);
+            if (token.IsCancellationRequested)
+            {
+                return;
+            }
+
+            _respuesta = respuesta;
+            var todas = ConstructorDeSeries.Construir(respuesta, _estado.Medida, _catalogos!, _estado.Agregacion);
+            _series = [.. todas.Where(s => s.Puntos.Any(p => p.Valor is not null))];
+            _seriesSinDatos = [.. todas.Where(s => s.Puntos.All(p => p.Valor is null))];
+            _error = null;
+        }
+        catch (ErrorDeApiException ex)
+        {
+            _error = ex;
+            _respuesta = null;
+        }
+        catch (HttpRequestException)
+        {
+            _error = new ErrorDeApiException("Sin conexión", "No se ha podido contactar con la API.", null);
+            _respuesta = null;
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        finally
+        {
+            if (!token.IsCancellationRequested)
+            {
+                _cargando = false;
+            }
+        }
+    }
+
+    private Task CambiarRecurso(string recurso) => Aplicar(EstadoDeConsulta.Inicial(recurso) with { Agregacion = _estado.Agregacion, Desde = _estado.Desde, Hasta = _estado.Hasta });
+
+    private Task AlternarTerritorio(string id, bool marcado) =>
+        Aplicar(_estado with { Territorios = Alternar(_estado.Territorios, id, marcado, TerritoriosDisponibles.Select(t => t.Id)) });
+
+    private Task AlternarTipo(string id, bool marcado) =>
+        Aplicar(_estado with { Tipos = Alternar(_estado.Tipos, id, marcado, TiposDisponibles.Select(t => t.Id)) });
+
+    /// <summary>Marca o desmarca una opción respetando el orden del catálogo; siempre queda al menos una.</summary>
+    private static IReadOnlyList<string> Alternar(IReadOnlyList<string> actuales, string id, bool marcado, IEnumerable<string> orden)
+    {
+        var conjunto = actuales.ToHashSet(StringComparer.Ordinal);
+        if (marcado)
+        {
+            conjunto.Add(id);
+        }
+        else if (conjunto.Count > 1)
+        {
+            conjunto.Remove(id);
+        }
+
+        return [.. orden.Where(conjunto.Contains)];
+    }
+
+    /// <summary>Deja el estado dentro de lo que existe para ese recurso (la URL puede traer cualquier cosa).</summary>
+    private EstadoDeConsulta Normalizar(EstadoDeConsulta e)
+    {
+        if (_catalogos is null)
+        {
+            return e;
+        }
+
+        var territorios = _catalogos.Territorios.Where(t => t.ConDatosDe.Contains(e.Recurso)).Select(t => t.Id).ToList();
+        var tipos = _catalogos.Tipos.Where(t => t.ConDatosDe.Contains(e.Recurso)).Select(t => t.Id).ToList();
+        var medidas = _catalogos.Medidas.Where(m => m.Recurso == e.Recurso && (!m.SoloMensual || e.Agregacion == "mes")).Select(m => m.Id).ToList();
+        var rango = _catalogos.Metadatos.Disponibilidad.GetValueOrDefault(e.Recurso);
+
+        var territoriosElegidos = e.Territorios.Where(territorios.Contains).ToList();
+        var tiposElegidos = e.Tipos.Where(tipos.Contains).ToList();
+
+        string? Dentro(string? mes) =>
+            mes is null || rango is null || (string.CompareOrdinal(mes, rango.Desde) >= 0 && string.CompareOrdinal(mes, rango.Hasta) <= 0) ? mes : null;
+
+        var desde = Dentro(e.Desde);
+        var hasta = Dentro(e.Hasta);
+        if (desde is not null && hasta is not null && string.CompareOrdinal(desde, hasta) > 0)
+        {
+            hasta = null;
+        }
+
+        return e with
+        {
+            Territorios = territoriosElegidos.Count > 0 ? territoriosElegidos : [territorios.Contains("region-murcia") ? "region-murcia" : territorios.FirstOrDefault() ?? "region-murcia"],
+            Tipos = tiposElegidos.Count > 0 ? tiposElegidos : [tipos.Contains("hotel") ? "hotel" : tipos.FirstOrDefault() ?? "hotel"],
+            Medida = medidas.Contains(e.Medida) ? e.Medida : medidas.FirstOrDefault() ?? e.Medida,
+            Desde = desde,
+            Hasta = hasta,
+        };
+    }
+
+    private async Task Copiar(string titulo, string texto)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("explorador.copiar", texto);
+            _copiado = titulo;
+        }
+        catch (JSException)
+        {
+            _copiado = null;
+        }
+    }
+
+    private string NombreDeTerritorio(string id) => _catalogos?.Territorios.FirstOrDefault(t => t.Id == id)?.Nombre ?? id;
+
+    private string NombreDeTipo(string id) => _catalogos?.Tipos.FirstOrDefault(t => t.Id == id)?.Nombre ?? id;
+
+    private string NombreDeResidencia(string id) => id == "total" ? "Total" : _catalogos?.Residencias.FirstOrDefault(r => r.Id == id)?.Nombre ?? id;
+
+    private static string Etiqueta(string recurso) => recurso switch { "demanda" => "Demanda", "oferta" => "Oferta", _ => "Precios" };
+
+    private static string? Vacio(object? valor) => string.IsNullOrEmpty(valor?.ToString()) ? null : valor!.ToString();
+
+    private static string Sangria(TerritorioApi t) => t.Nivel switch
+    {
+        "pais" or "region" => "0",
+        "zona_ine" or "zona_mt" or "punto_ine" => "1",
+        _ => "2",
+    };
+
+    public void Dispose()
+    {
+        Navegacion.LocationChanged -= AlCambiarLaUrl;
+        _peticion?.Cancel();
+        _peticion?.Dispose();
+    }
+}

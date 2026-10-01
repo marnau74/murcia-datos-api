@@ -1,0 +1,92 @@
+@using System.Globalization
+@using MurciaDatos.Explorador.Logica
+
+@* Gráfica de líneas en SVG puro: sin librerías ni estilos en línea (la política de contenido de la API no los permite). *@
+
+@if (!_geometria.HayDatos)
+{
+    <p class="vacio" role="status">No hay datos para esta selección.</p>
+}
+else
+{
+    <figure class="grafica">
+        <svg viewBox="0 0 @Num(GeometriaDeGrafica.Ancho) @Num(GeometriaDeGrafica.Alto)" role="img" aria-labelledby="@IdTitulo @IdDescripcion" preserveAspectRatio="xMidYMid meet">
+            <title id="@IdTitulo">@Titulo</title>
+            <desc id="@IdDescripcion">@Descripcion</desc>
+
+            @foreach (var marca in _geometria.Marcas)
+            {
+                <line class="rejilla" x1="@Num(GeometriaDeGrafica.MargenIzquierdo)" x2="@Num(GeometriaDeGrafica.Ancho - GeometriaDeGrafica.MargenDerecho)" y1="@Num(marca.Y)" y2="@Num(marca.Y)" />
+                <TextoSvg Clase="eje" X="@Num(GeometriaDeGrafica.MargenIzquierdo - 8)" Y="@Num(marca.Y)" Ancla="end" LineaBase="middle">@marca.Etiqueta</TextoSvg>
+            }
+
+            @foreach (var (x, etiqueta) in _geometria.EtiquetasX())
+            {
+                <TextoSvg Clase="eje" X="@Num(x)" Y="@Num(GeometriaDeGrafica.Alto - 12)" Ancla="middle">@etiqueta</TextoSvg>
+            }
+
+            @for (var i = 0; i < _geometria.Series.Count; i++)
+            {
+                var serie = _geometria.Series[i];
+                <g class="serie s@(i % 8)">
+                    <path d="@_geometria.Trazo(serie)" fill="none" />
+                    @foreach (var punto in _geometria.PuntosConDato(serie))
+                    {
+                        <circle class="punto @(punto.Punto.Incompleto ? "incompleto" : "")" cx="@Num(punto.X)" cy="@Num(punto.Y)" r="@(_geometria.Periodos.Count <= 40 ? "3.5" : "5")">
+                            <title>@serie.Nombre · @punto.Punto.Periodo: @Formato.Valor(punto.Punto.Valor, Unidad)@(punto.Punto.Incompleto ? $" (periodo incompleto: {punto.Punto.Meses} meses con dato)" : "")</title>
+                        </circle>
+                    }
+                </g>
+            }
+        </svg>
+
+        <figcaption>
+            <ul class="leyenda">
+                @for (var i = 0; i < _geometria.Series.Count; i++)
+                {
+                    <li>
+                        <svg class="muestra s@(i % 8)" viewBox="0 0 28 10" aria-hidden="true"><path d="M0 5 H28" fill="none" /></svg>
+                        <span>@_geometria.Series[i].Nombre</span>
+                    </li>
+                }
+            </ul>
+            <span class="unidad">Unidad: @Unidad@(HayIncompletos ? " · Círculo vacío: periodo con menos meses de los que le tocan." : "")</span>
+        </figcaption>
+    </figure>
+}
+
+@code {
+    private static int _contador;
+    private readonly int _id = Interlocked.Increment(ref _contador);
+    private GeometriaDeGrafica _geometria = new([], baseCero: true);
+
+    [Parameter, EditorRequired] public IReadOnlyList<SerieGrafica> Series { get; set; } = [];
+
+    [Parameter] public string Unidad { get; set; } = string.Empty;
+
+    [Parameter] public string Titulo { get; set; } = "Gráfica";
+
+    /// <summary>Con índices y tasas el eje no tiene por qué empezar en cero.</summary>
+    [Parameter] public bool BaseCero { get; set; } = true;
+
+    private bool HayIncompletos => _geometria.Series.Any(s => s.Puntos.Any(p => p.Incompleto));
+
+    private string IdTitulo => $"grafica-titulo-{_id}";
+
+    private string IdDescripcion => $"grafica-desc-{_id}";
+
+    private string Descripcion
+    {
+        get
+        {
+            var valores = _geometria.Series.SelectMany(s => s.Puntos).Where(p => p.Valor is not null).ToList();
+            return valores.Count == 0
+                ? "Sin datos."
+                : $"{_geometria.Series.Count} serie(s), de {_geometria.Periodos[0]} a {_geometria.Periodos[^1]}. Valores entre {Formato.Valor(valores.Min(p => p.Valor), Unidad)} y {Formato.Valor(valores.Max(p => p.Valor), Unidad)}. Los mismos datos están en la tabla de debajo.";
+        }
+    }
+
+    protected override void OnParametersSet() => _geometria = new GeometriaDeGrafica(Series, BaseCero);
+
+    private static string Num(double valor) => valor.ToString("0.##", CultureInfo.InvariantCulture);
+}

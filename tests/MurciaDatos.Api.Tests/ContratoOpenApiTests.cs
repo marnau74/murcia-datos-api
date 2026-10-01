@@ -75,7 +75,7 @@ public class ContratoOpenApiTests(ApiCompartida compartida) : IClassFixture<ApiC
             }
         }
 
-        ids.Count.ShouldBe(9);
+        ids.Count.ShouldBe(10);
         ids.ShouldBeUnique();
     }
 

@@ -32,6 +32,7 @@ builder.Services.AddSingleton<AlmacenDeInstantaneas>();
 builder.Services.AddSingleton<ServicioDeActualizacion>();
 builder.Services.AddSingleton<IObservadorDeDatos, VaciadoDeCacheAlCambiarLosDatos>();
 builder.Services.AddSingleton<MetricasDeApi>();
+builder.Services.AddSingleton<PoliticaDeContenido>();
 builder.Services.AddHostedService<ActualizadorDeDatos>();
 
 // La descarga tiene sus propios tiempos: un fichero de datos puede ser grande y la red de GitHub, lenta.

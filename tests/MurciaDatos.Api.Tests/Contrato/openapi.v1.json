@@ -71,6 +71,28 @@
         }
       }
     },
+    "/v1/medidas": {
+      "get": {
+        "tags": [
+          "Catálogos"
+        ],
+        "summary": "Medidas de cada recurso, con su unidad y cómo se agregan",
+        "description": "`suma` para los flujos (viajeros, pernoctaciones); `media` para existencias, tasas e índices. `solo_mensual`: la medida no se puede promediar entre meses y solo existe con `agregacion=mes`.",
+        "operationId": "ListarMedidas",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListadoOfMedidaDeRecurso"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/residencias": {
       "get": {
         "tags": [
@@ -901,6 +923,24 @@
           }
         }
       },
+      "ListadoOfMedidaDeRecurso": {
+        "required": [
+          "datos",
+          "meta"
+        ],
+        "type": "object",
+        "properties": {
+          "datos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MedidaDeRecurso"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaDeListado"
+          }
+        }
+      },
       "ListadoOfTerritorioPublico": {
         "required": [
           "datos",
@@ -934,6 +974,37 @@
           },
           "meta": {
             "$ref": "#/components/schemas/MetaDeListado"
+          }
+        }
+      },
+      "MedidaDeRecurso": {
+        "required": [
+          "recurso",
+          "id",
+          "unidad",
+          "agregado",
+          "descripcion",
+          "solo_mensual"
+        ],
+        "type": "object",
+        "properties": {
+          "recurso": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "unidad": {
+            "type": "string"
+          },
+          "agregado": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": "string"
+          },
+          "solo_mensual": {
+            "type": "boolean"
           }
         }
       },
@@ -1289,7 +1360,8 @@
       "TipoPublico": {
         "required": [
           "id",
-          "nombre"
+          "nombre",
+          "con_datos_de"
         ],
         "type": "object",
         "properties": {
@@ -1298,6 +1370,12 @@
           },
           "nombre": {
             "type": "string"
+          },
+          "con_datos_de": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       }

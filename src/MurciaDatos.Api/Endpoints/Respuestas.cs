@@ -37,7 +37,16 @@ public sealed record TerritorioPublico(
 
 public sealed record TipoPublico(
     [property: JsonPropertyName("id")] string Id,
-    [property: JsonPropertyName("nombre")] string Nombre);
+    [property: JsonPropertyName("nombre")] string Nombre,
+    [property: JsonPropertyName("con_datos_de")] IReadOnlyList<string> ConDatosDe);
+
+public sealed record MedidaDeRecurso(
+    [property: JsonPropertyName("recurso")] string Recurso,
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("unidad")] string Unidad,
+    [property: JsonPropertyName("agregado")] string Agregado,
+    [property: JsonPropertyName("descripcion")] string Descripcion,
+    [property: JsonPropertyName("solo_mensual")] bool SoloMensual);
 
 public sealed record Listado<T>(
     [property: JsonPropertyName("datos")] IReadOnlyList<T> Datos,

@@ -1,32 +1,30 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MurciaDatos.Explorador</title>
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="Explorador de los datos de turismo de la Región de Murcia: demanda, oferta y precios del alojamiento turístico." />
+    <title>Datos de turismo de Murcia</title>
     <base href="/" />
-    <link rel="preload" id="webassembly" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="css/app.css" />
-    <!-- If you add any scoped CSS files, uncomment the following to load them
-    <link href="MurciaDatos.Explorador.styles.css" rel="stylesheet" /> -->
+    <link rel="preload" id="webassembly" />
     <script type="importmap"></script>
 </head>
 
 <body>
     <div id="app">
-        <svg class="loading-progress">
-            <circle r="40%" cx="50%" cy="50%" />
-            <circle r="40%" cx="50%" cy="50%" />
-        </svg>
-        <div class="loading-progress-text"></div>
+        <p class="arranque" role="status">Cargando el explorador…</p>
     </div>
 
-    <div id="blazor-error-ui">
-        An unhandled error has occurred.
-        <a href="." class="reload">Reload</a>
-        <span class="dismiss">🗙</span>
+    <div id="blazor-error-ui" hidden>
+        Ha ocurrido un error inesperado.
+        <a href="." class="reload">Recargar</a>
     </div>
+
+    <script src="js/explorador.js"></script>
     <script src="_framework/blazor.webassembly#[.{fingerprint}].js"></script>
 </body>
 
